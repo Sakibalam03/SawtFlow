@@ -1,0 +1,10 @@
+prompt_id,language,category,text
+en_latency,en,latency,"Your appointment is confirmed for tomorrow at ten in the morning."
+en_names_numbers,en,names_numbers,"Dr. Maya Chen will meet Omar in room 407 at 4:15 PM."
+en_prosody,en,prosody,"Are you certain? I said Tuesday, not Thursday - please check again."
+ar_latency,ar,latency,"تم تأكيد موعدك غدا في الساعة العاشرة صباحا."
+ar_names_numbers,ar,names_numbers,"ستقابل الدكتورة مريم أحمد عمر في الغرفة ٢٠٧ الساعة الرابعة والربع مساء."
+ar_prosody,ar,prosody,"هل أنت متأكد؟ قلت يوم الثلاثاء، وليس يوم الخميس، يرجى التحقق مرة أخرى."
+hi_latency,hi,latency,"आपकी नियुक्ति कल सुबह दस बजे के लिए पक्की है।"
+hi_names_numbers,hi,names_numbers,"डॉक्टर माया चेन कमरे 407 में शाम 4:15 बजे उमर से मिलेंगी।"
+hi_prosody,hi,prosody,"क्या आप निश्चित हैं? मैंने मंगलवार कहा था, गुरुवार नहीं - कृपया फिर जांचें।"

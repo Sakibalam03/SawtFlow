@@ -1,0 +1,36 @@
+seed: 20260717
+device: cuda
+precision: float16
+warmup_runs: 1
+repetitions: 3
+reference_audio: data/references/reference.wav
+reference_transcript: "EXACT WORDS SPOKEN IN reference.wav"
+reference_language: en
+output_root: outputs
+models:
+  chatterbox-multilingual-v3:
+    enabled: true
+    revision: main
+    languages: [en, ar, hi]
+  chatterbox-turbo:
+    enabled: true
+    revision: main
+    languages: [en]
+  xtts-v2:
+    enabled: true
+    revision: main
+    languages: [ar]
+  indicf5:
+    enabled: true
+    revision: main
+    languages: [hi]
+asr:
+  model: large-v3-turbo
+  compute_type: float16
+  beam_size: 5
+  vad_filter: true
+speaker_embedding:
+  model: speechbrain/spkrec-ecapa-voxceleb
+listening:
+  random_seed: 20260717
+
