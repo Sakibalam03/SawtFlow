@@ -1,0 +1,16 @@
+name: infinia-eval
+channels: [conda-forge, pytorch, nvidia]
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - faster-whisper
+      - jiwer
+      - numpy
+      - pandas
+      - pyyaml
+      - pytest
+      - soundfile
+      - speechbrain
+      - torch
+      - torchaudio

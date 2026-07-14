@@ -1,0 +1,12 @@
+name: infinia-indicf5
+channels: [conda-forge, pytorch, nvidia]
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - git+https://github.com/AI4Bharat/IndicF5.git
+      - numpy
+      - pyyaml
+      - soundfile
+      - torch
+      - transformers
