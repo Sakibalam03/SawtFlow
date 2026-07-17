@@ -1,5 +1,7 @@
 # Infinia multilingual voice benchmark
 
+![Infinia multilingual voice benchmark interface](<assets/Screenshot 2026-07-18 050710.png>)
+
 An evidence-first, local benchmark for consented voice cloning in English,
 Modern Standard Arabic (MSA), and Hindi. It compares a shared multilingual
 baseline with a language-specific challenger, produces WAVs and immutable run
