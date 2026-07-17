@@ -15,4 +15,6 @@ evidence/pip-freeze-*.txt
 evidence/system_info_*.txt
 *.log
 *.zip
-
+node_modules/
+.next/
+*.tsbuildinfo
