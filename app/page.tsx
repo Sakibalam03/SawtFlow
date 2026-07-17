@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Status = "idle" | "processing" | "ready";
 
@@ -21,9 +21,25 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [duration, setDuration] = useState<number | null>(null);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [generationSeconds, setGenerationSeconds] = useState<number | null>(null);
+  const [warmupSeconds, setWarmupSeconds] = useState<number | null>(null);
+  const [workerStatus, setWorkerStatus] = useState<"warming" | "ready" | "error">("warming");
   const [error, setError] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const warmWorker = async () => {
+      try {
+        const response = await fetch("/api/generate", { cache: "no-store" });
+        if (!response.ok) throw new Error();
+        setWorkerStatus("ready");
+      } catch {
+        setWorkerStatus("error");
+      }
+    };
+    void warmWorker();
+  }, []);
 
   const generate = async () => {
     if (!text.trim() || status === "processing") return;
@@ -33,10 +49,13 @@ export default function Home() {
     setStatus("processing");
     try {
       const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
-      const result = await response.json() as { audioUrl?: string; duration?: number; error?: string };
+      const result = await response.json() as { audioUrl?: string; audioDuration?: number; generationSeconds?: number; startup?: { loadSeconds: number; conditioningSeconds: number; startupSeconds: number }; error?: string };
       if (!response.ok || !result.audioUrl) throw new Error(result.error || "Audio generation failed.");
       setAudioUrl(result.audioUrl);
-      setDuration(result.duration ?? null);
+      setAudioDuration(result.audioDuration ?? null);
+      setGenerationSeconds(result.generationSeconds ?? null);
+      setWarmupSeconds(result.startup?.startupSeconds ?? null);
+      setWorkerStatus("ready");
       setStatus("ready");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Audio generation failed.");
@@ -53,20 +72,20 @@ export default function Home() {
 
   return (
     <main className="page">
-      <header className="header"><a className="brand" href="/"><span className="brand-mark"><span /></span>infinia</a><span className="header-note"><i /> Chatterbox Turbo</span></header>
+      <header className="header"><a className="brand" href="/"><span className="brand-mark"><span /></span>infinia</a><span className={`header-note ${workerStatus}`}><i /> {workerStatus === "warming" ? "Warming Chatterbox Turbo" : workerStatus === "ready" ? "Chatterbox Turbo ready" : "Turbo needs attention"}</span></header>
       <section className="intro"><div className="intro-icon"><Icon name="wave" size={26} /></div><p>TEXT TO AUDIO</p><h1>Turn words into your voice.</h1><span>Chatterbox Turbo uses your configured reference recording to generate an English voice clone.</span></section>
 
       <section className="studio" aria-label="Text to audio studio">
         <div className="studio-header"><div><h2>Your text</h2><p>Type or paste a message below.</p></div><span>{text.trim().length} characters</span></div>
-        <textarea value={text} onChange={event => { setText(event.target.value); setAudioUrl(null); setDuration(null); if (status === "ready") setStatus("idle"); }} placeholder="Write something to turn into speech…" maxLength={1000} aria-label="Text to convert to audio" />
-        <div className="studio-actions"><button className="generate" onClick={generate} disabled={!text.trim() || status === "processing"}>{status === "processing" ? <><span className="spinner" /> Generating with Turbo…</> : <><Icon name="spark" size={16} /> Generate audio</>}</button><span>Up to 1,000 characters</span></div>
+        <textarea value={text} onChange={event => { setText(event.target.value); setAudioUrl(null); setAudioDuration(null); setGenerationSeconds(null); setWarmupSeconds(null); if (status === "ready") setStatus("idle"); }} placeholder="Write something to turn into speech…" maxLength={1000} aria-label="Text to convert to audio" />
+        <div className="studio-actions"><button className="generate" onClick={generate} disabled={!text.trim() || status === "processing" || workerStatus === "warming"}>{status === "processing" ? <><span className="spinner" /> Generating with Turbo…</> : workerStatus === "warming" ? <><span className="spinner" /> Warming voice model…</> : <><Icon name="spark" size={16} /> Generate audio</>}</button><span>Up to 1,000 characters</span></div>
         {error && <p className="error" role="alert">{error}</p>}
       </section>
 
       <section className={`audio-card ${status === "processing" ? "is-processing" : ""} ${isPlaying ? "is-playing" : ""}`} aria-live="polite">
         <div className="audio-visual"><span className="halo halo-one" /><span className="halo halo-two" /><div className="mic"><Icon name="mic" size={27} /></div></div>
         <div className="audio-copy">
-          {status === "processing" ? <><p className="label">CHATTERBOX TURBO</p><h2>Creating your voice sample</h2><span>Loading the model and conditioning it with your reference recording…</span><div className="loading-wave">{Array.from({ length: 18 }).map((_, index) => <i key={index} />)}</div></> : status === "ready" ? <><p className="label ready-label"><Icon name="check" size={13} /> AUDIO READY</p><h2>{isPlaying ? "Playing your voice sample" : "Your voice sample is ready"}</h2><span>{duration ? `${duration.toFixed(2)} seconds · ` : ""}{isPlaying ? "The microphone lights up during playback." : "Press play to hear Chatterbox Turbo output."}</span></> : <><p className="label">AUDIO PREVIEW</p><h2>Ready when you are</h2><span>Generate audio to create a voice-cloned WAV.</span></>}
+          {status === "processing" ? <><p className="label">CHATTERBOX TURBO</p><h2>Creating your voice sample</h2><span>Your preloaded voice model is generating audio…</span><div className="loading-wave">{Array.from({ length: 18 }).map((_, index) => <i key={index} />)}</div></> : status === "ready" ? <><p className="label ready-label"><Icon name="check" size={13} /> AUDIO READY</p><h2>{isPlaying ? "Playing your voice sample" : "Your voice sample is ready"}</h2><span>{isPlaying ? "The microphone lights up during playback." : <><b>Audio length:</b> {audioDuration?.toFixed(2) ?? "—"} s <em>·</em> <b>Generated in:</b> {generationSeconds?.toFixed(2) ?? "—"} s{warmupSeconds ? <> <em>·</em> <b>Initial warm-up:</b> {warmupSeconds.toFixed(2)} s</> : ""}</>}</span></> : <><p className="label">AUDIO PREVIEW</p><h2>{workerStatus === "warming" ? "Preparing your voice model" : "Ready when you are"}</h2><span>{workerStatus === "warming" ? "Turbo is loading once so future requests are faster." : "Generate audio to create a voice-cloned WAV."}</span></>}
         </div>
         {audioUrl && <><audio ref={audio} src={audioUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => { setIsPlaying(false); setError("The generated WAV could not be played."); }} /><button className="play" onClick={() => void playAudio()} aria-label={isPlaying ? "Stop audio" : "Play audio"}>{isPlaying ? <Icon name="stop" size={17} /> : <Icon name="play" size={17} />}</button></>}
       </section>
