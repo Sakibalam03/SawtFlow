@@ -959,7 +959,7 @@ The submission also includes Track B-like audio evidence and a Track C-like repo
 ### 5.2 Required repository contents
 
 ```text
-infinia-voice-case-study/
+Voice-Veda/
 ├── PROJECT.md
 ├── README.md
 ├── RUNBOOK_24H.md
@@ -1166,7 +1166,7 @@ Include:
 ### 7.2 Suggested archive name
 
 ```text
-infinia-voice-case-study-<your-name>-YYYYMMDD.zip
+voice-veda-<your-name>-YYYYMMDD.zip
 ```
 
 ### 7.3 Final archive command
@@ -1174,8 +1174,8 @@ infinia-voice-case-study-<your-name>-YYYYMMDD.zip
 From the directory above the repo:
 
 ```bash
-zip -r infinia-voice-case-study-<your-name>-YYYYMMDD.zip \
-  infinia-voice-case-study \
+zip -r voice-veda-<your-name>-YYYYMMDD.zip \
+  Voice-Veda \
   -x '*/.git/*' \
      '*/__pycache__/*' \
      '*/.pytest_cache/*' \
