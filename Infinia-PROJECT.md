@@ -959,7 +959,7 @@ The submission also includes Track B-like audio evidence and a Track C-like repo
 ### 5.2 Required repository contents
 
 ```text
-Voice-Veda/
+repository root/
 ├── PROJECT.md
 ├── README.md
 ├── RUNBOOK_24H.md
@@ -1171,11 +1171,10 @@ voice-veda-<your-name>-YYYYMMDD.zip
 
 ### 7.3 Final archive command
 
-From the directory above the repo:
+From the repository root:
 
 ```bash
-zip -r voice-veda-<your-name>-YYYYMMDD.zip \
-  Voice-Veda \
+zip -r ../voice-veda-<your-name>-YYYYMMDD.zip . \
   -x '*/.git/*' \
      '*/__pycache__/*' \
      '*/.pytest_cache/*' \
