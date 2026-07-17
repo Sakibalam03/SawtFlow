@@ -1,92 +1,77 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 
-type IconName = "grid" | "wave" | "chart" | "settings" | "play" | "chevron" | "check" | "clock" | "more" | "arrow" | "plus" | "close";
+type Status = "idle" | "processing" | "ready";
 
-function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
-    wave: <><path d="M3 12h2l2.2-7 3.5 14L14 8l2 4h5" /></>,
-    chart: <><path d="M4 19V5M4 19h16" /><path d="m7 15 4-4 3 2 5-6" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.32 2.32-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-3.28v-.09A1.7 1.7 0 0 0 10.2 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06-2.32-2.32.06-.06A1.7 1.7 0 0 0 6.34 15a1.7 1.7 0 0 0-1.56-1.03H4.7v-3.28h.08A1.7 1.7 0 0 0 6.34 9.66a1.7 1.7 0 0 0-.34-1.88l-.06-.06L8.26 5.4l.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1.03-1.56V4.16h3.28v.08a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.32 2.32-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.03h.08v3.28h-.08A1.7 1.7 0 0 0 19.4 15Z" /></>,
+function Icon({ name, size = 20 }: { name: "wave" | "spark" | "play" | "stop" | "mic" | "check"; size?: number }) {
+  const paths = {
+    wave: <path d="M3 12h2l2.2-7 3.5 14L14 8l2 4h5" />,
+    spark: <path d="m12 3 1.8 5.3L19 10l-5.2 1.7L12 17l-1.8-5.3L5 10l5.2-1.7L12 3Z" />,
     play: <path d="m9 6 8 6-8 6V6Z" fill="currentColor" stroke="none" />,
-    chevron: <path d="m9 18 6-6-6-6" />,
+    stop: <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none" />,
+    mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8 21h8" /></>,
     check: <path d="m5 12 4 4L19 6" />,
-    clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></>,
-    more: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>,
-    arrow: <><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>,
-    plus: <><path d="M12 5v14M5 12h14" /></>,
-    close: <path d="m6 6 12 12M18 6 6 18" />,
   };
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-const models = [
-  { name: "Chatterbox Multilingual V3", short: "MTL-V3", langs: "EN · AR · HI", status: "Ready", type: "baseline", color: "navy" },
-  { name: "Chatterbox Turbo", short: "TURBO", langs: "EN", status: "Ready", type: "challenger", color: "blue" },
-  { name: "XTTS-v2", short: "XTTS", langs: "AR", status: "Ready", type: "challenger", color: "violet" },
-  { name: "AI4Bharat IndicF5", short: "F5", langs: "HI", status: "Ready", type: "challenger", color: "rose" },
-];
-
-const runs = [
-  { prompt: "Your appointment is confirmed for tomorrow at ten in the morning.", label: "Latency test", duration: "4.16s", latency: "9.67s", language: "EN", model: "Chatterbox Turbo", time: "16:51", grade: "Needs review" },
-  { prompt: "Dr. Maya Chen will meet Omar in room 407 at 4:15 PM.", label: "Names & numbers", duration: "5.60s", latency: "3.08s", language: "EN", model: "Chatterbox Turbo", time: "16:51", grade: "Pass" },
-  { prompt: "Are you certain? I said Tuesday, not Thursday — please check again.", label: "Prosody", duration: "5.00s", latency: "2.71s", language: "EN", model: "Chatterbox Turbo", time: "16:51", grade: "Pass" },
-];
-
 export default function Home() {
-  const [activeNav, setActiveNav] = useState("Overview");
-  const [language, setLanguage] = useState("All languages");
-  const [isLaunching, setIsLaunching] = useState(false);
-  const [playing, setPlaying] = useState<number | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [text, setText] = useState("Welcome to Infinia. Your voice, brought to life in a moment.");
+  const [status, setStatus] = useState<Status>("idle");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement>(null);
 
-  const coverage = useMemo(() => language === "All languages" ? models : models.filter(model => model.langs.includes(language.slice(0, 2).toUpperCase())), [language]);
-  const announce = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 3000);
+  const generate = async () => {
+    if (!text.trim() || status === "processing") return;
+    audio.current?.pause();
+    setIsPlaying(false);
+    setError(null);
+    setStatus("processing");
+    try {
+      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      const result = await response.json() as { audioUrl?: string; duration?: number; error?: string };
+      if (!response.ok || !result.audioUrl) throw new Error(result.error || "Audio generation failed.");
+      setAudioUrl(result.audioUrl);
+      setDuration(result.duration ?? null);
+      setStatus("ready");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Audio generation failed.");
+      setStatus("idle");
+    }
   };
-  const startRun = () => {
-    setIsLaunching(true);
-    window.setTimeout(() => { setIsLaunching(false); announce("Benchmark run queued. The local pipeline will write results to outputs/."); }, 850);
+
+  const playAudio = async () => {
+    if (!audio.current) return;
+    if (isPlaying) { audio.current.pause(); return; }
+    audio.current.currentTime = 0;
+    await audio.current.play();
   };
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark"><span /></span><span>infinia</span></div>
-        <div className="workspace"><span className="workspace-icon">V</span><span>Voice Benchmark</span><button aria-label="Switch workspace"><Icon name="chevron" size={15} /></button></div>
-        <nav className="nav" aria-label="Main navigation">
-          {[{ label: "Overview", icon: "grid" }, { label: "Runs", icon: "wave" }, { label: "Reports", icon: "chart" }].map(item => (
-            <button key={item.label} className={activeNav === item.label ? "active" : ""} onClick={() => { setActiveNav(item.label); announce(`${item.label} view selected.`); }}><Icon name={item.icon as IconName} /><span>{item.label}</span></button>
-          ))}
-        </nav>
-        <div className="side-bottom"><button onClick={() => announce("Settings are managed in configs/benchmark.yaml.")}><Icon name="settings" /><span>Settings</span></button><div className="user"><span className="avatar">AS</span><div><strong>Assignment</strong><small>Local workspace</small></div><Icon name="more" size={18} /></div></div>
-      </aside>
+    <main className="page">
+      <header className="header"><a className="brand" href="/"><span className="brand-mark"><span /></span>infinia</a><span className="header-note"><i /> Chatterbox Turbo</span></header>
+      <section className="intro"><div className="intro-icon"><Icon name="wave" size={26} /></div><p>TEXT TO AUDIO</p><h1>Turn words into your voice.</h1><span>Chatterbox Turbo uses your configured reference recording to generate an English voice clone.</span></section>
 
-      <section className="content">
-        <header className="topbar"><div className="crumb">Voice Benchmark <span>/</span> <strong>{activeNav}</strong></div><div className="top-actions"><span className="saved"><Icon name="check" size={14} /> Config saved</span><button className="icon-button" aria-label="More actions" onClick={() => announce("More run options will appear here.")}><Icon name="more" /></button></div></header>
-
-        <div className="page-head"><div><p className="eyebrow">MULTILINGUAL VOICE AI</p><h1>Benchmark overview</h1><p className="subhead">A clear view of local voice-generation runs across English, Arabic and Hindi.</p></div><button className="primary" onClick={startRun} disabled={isLaunching}>{isLaunching ? <span className="spinner" /> : <Icon name="play" size={17} />} {isLaunching ? "Starting run…" : "Run benchmark"}</button></div>
-
-        <section className="metrics" aria-label="Current benchmark metrics">
-          <Metric icon="clock" label="Latest run" value="Jul 17, 16:51" note="Chatterbox Turbo · English" />
-          <Metric icon="wave" label="Successful clips" value="3 / 3" note="Smoke benchmark output" />
-          <Metric icon="chart" label="Median latency" value="3.08 s" note="Full-clip generation" />
-          <Metric icon="grid" label="Models ready" value="4" note="Across 3 languages" />
-        </section>
-
-        <section className="section-card coverage-card"><div className="section-heading"><div><h2>Model coverage</h2><p>Configured candidates from <code>benchmark.yaml</code></p></div><label className="select-wrap"><span className="sr-only">Filter models by language</span><select value={language} onChange={event => setLanguage(event.target.value)}><option>All languages</option><option>English</option><option>Arabic</option><option>Hindi</option></select></label></div><div className="model-list">{coverage.map(model => <div className="model-row" key={model.name}><span className={`model-badge ${model.color}`}>{model.short}</span><div className="model-name"><strong>{model.name}</strong><span>{model.type}</span></div><span className="languages">{model.langs}</span><span className="ready"><i />{model.status}</span><button aria-label={`View ${model.name}`} className="row-action" onClick={() => announce(`${model.name} is configured for ${model.langs}.`)}><Icon name="chevron" size={17} /></button></div>)}</div></section>
-
-        <section className="lower-grid"><div className="section-card recent-card"><div className="section-heading"><div><h2>Recent audio evidence</h2><p>Latest smoke output</p></div><button className="text-button" onClick={() => announce("All benchmark records are stored in outputs/raw/benchmark.jsonl.")}>View all <Icon name="arrow" size={15} /></button></div><div className="run-list">{runs.map((run, index) => <article className="run" key={run.label}><button className={`play-button ${playing === index ? "is-playing" : ""}`} aria-label={`Play ${run.label}`} onClick={() => { setPlaying(playing === index ? null : index); announce(playing === index ? "Playback paused." : `Preview selected: ${run.label}.`); }}><Icon name={playing === index ? "close" : "play"} size={16} /></button><div className="run-info"><div className="run-title"><strong>{run.label}</strong><span>{run.language}</span><span>·</span><span>{run.model}</span></div><p>{run.prompt}</p><div className="run-meta"><span>{run.duration} audio</span><span>{run.latency} generation</span><span>{run.time}</span></div></div><span className={`grade ${run.grade === "Pass" ? "pass" : "review"}`}>{run.grade}</span></article>)}</div></div>
-          <div className="section-card guide-card"><div className="guide-icon"><Icon name="plus" size={20} /></div><h2>Ready to run?</h2><p>Use the consented reference audio and your benchmark configuration to generate a new local run.</p><button className="secondary" onClick={startRun}><Icon name="play" size={15} /> Start a run</button><div className="guide-note"><Icon name="check" size={15} /><span>Reference audio configured</span></div></div></section>
+      <section className="studio" aria-label="Text to audio studio">
+        <div className="studio-header"><div><h2>Your text</h2><p>Type or paste a message below.</p></div><span>{text.trim().length} characters</span></div>
+        <textarea value={text} onChange={event => { setText(event.target.value); setAudioUrl(null); setDuration(null); if (status === "ready") setStatus("idle"); }} placeholder="Write something to turn into speech…" maxLength={1000} aria-label="Text to convert to audio" />
+        <div className="studio-actions"><button className="generate" onClick={generate} disabled={!text.trim() || status === "processing"}>{status === "processing" ? <><span className="spinner" /> Generating with Turbo…</> : <><Icon name="spark" size={16} /> Generate audio</>}</button><span>Up to 1,000 characters</span></div>
+        {error && <p className="error" role="alert">{error}</p>}
       </section>
-      {toast && <div className="toast" role="status"><Icon name="check" size={16} />{toast}</div>}
+
+      <section className={`audio-card ${status === "processing" ? "is-processing" : ""} ${isPlaying ? "is-playing" : ""}`} aria-live="polite">
+        <div className="audio-visual"><span className="halo halo-one" /><span className="halo halo-two" /><div className="mic"><Icon name="mic" size={27} /></div></div>
+        <div className="audio-copy">
+          {status === "processing" ? <><p className="label">CHATTERBOX TURBO</p><h2>Creating your voice sample</h2><span>Loading the model and conditioning it with your reference recording…</span><div className="loading-wave">{Array.from({ length: 18 }).map((_, index) => <i key={index} />)}</div></> : status === "ready" ? <><p className="label ready-label"><Icon name="check" size={13} /> AUDIO READY</p><h2>{isPlaying ? "Playing your voice sample" : "Your voice sample is ready"}</h2><span>{duration ? `${duration.toFixed(2)} seconds · ` : ""}{isPlaying ? "The microphone lights up during playback." : "Press play to hear Chatterbox Turbo output."}</span></> : <><p className="label">AUDIO PREVIEW</p><h2>Ready when you are</h2><span>Generate audio to create a voice-cloned WAV.</span></>}
+        </div>
+        {audioUrl && <><audio ref={audio} src={audioUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} onError={() => { setIsPlaying(false); setError("The generated WAV could not be played."); }} /><button className="play" onClick={() => void playAudio()} aria-label={isPlaying ? "Stop audio" : "Play audio"}>{isPlaying ? <Icon name="stop" size={17} /> : <Icon name="play" size={17} />}</button></>}
+      </section>
+
+      <p className="footnote"><Icon name="mic" size={14} /> Uses <code>data/references/reference.wav</code> and creates WAV files in <code>outputs/ui</code>.</p>
     </main>
   );
-}
-
-function Metric({ icon, label, value, note }: { icon: IconName; label: string; value: string; note: string }) {
-  return <article className="metric"><span className="metric-icon"><Icon name={icon} size={19} /></span><div><p>{label}</p><strong>{value}</strong><small>{note}</small></div></article>;
 }

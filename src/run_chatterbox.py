@@ -18,7 +18,7 @@ def main() -> None:
         def load_model(settings):
             from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
-            return ChatterboxMultilingualTTS.from_pretrained(device=settings["device"], t3_model="v3")
+            return ChatterboxMultilingualTTS.from_pretrained(device=settings["device"])
 
         def synthesize(model, prompt, reference: Path, _settings):
             audio = model.generate(prompt.text, language_id=prompt.language, audio_prompt_path=str(reference))

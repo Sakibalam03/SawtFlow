@@ -4,7 +4,7 @@ precision: float16
 warmup_runs: 1
 repetitions: 3
 reference_audio: data/references/reference.wav
-reference_transcript: "hello hello hello. this is a test"
+reference_transcript: "The quick brown fox jumps over the lazy dog to reach the fence and eat away all the sheep in the herd."
 reference_language: en
 output_root: outputs
 models:

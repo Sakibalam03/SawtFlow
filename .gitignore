@@ -8,6 +8,7 @@ __pycache__/
 models/
 .cache/
 outputs/audio/
+outputs/ui/
 outputs/raw/
 outputs/eval/*.csv
 outputs/eval/*KEY.csv
