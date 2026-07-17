@@ -43,6 +43,9 @@ def main() -> None:
     for line in sys.stdin:
         try:
             request = json.loads(line)
+            if request.get("kind") == "shutdown":
+                emit({"kind": "stopped"})
+                break
             request_id = request["id"]
             text = str(request["text"]).strip()
             output = Path(request["output"])

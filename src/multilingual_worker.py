@@ -46,6 +46,9 @@ def main() -> None:
     for line in sys.stdin:
         try:
             request = json.loads(line)
+            if request.get("kind") == "shutdown":
+                emit({"kind": "stopped"})
+                break
             request_id, text, language = request["id"], str(request["text"]).strip(), str(request["language"])
             output = Path(request["output"])
             if language not in {"ar", "hi"}:
