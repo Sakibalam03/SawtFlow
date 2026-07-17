@@ -8,7 +8,7 @@ import time
 import traceback
 from pathlib import Path
 
-from common import cuda_synchronize, load_config, resolve_path, save_audio, seed_everything
+from common import cuda_synchronize, load_config, peak_memory_mb, reset_peak_memory, resolve_path, save_audio, seed_everything
 
 
 def emit(payload: dict) -> None:
@@ -51,6 +51,7 @@ def main() -> None:
             if len(text) > 1000:
                 raise ValueError("Text must be 1,000 characters or fewer.")
 
+            reset_peak_memory(device)
             cuda_synchronize(device)
             generation_start = time.perf_counter()
             waveform = model.generate(text)
@@ -58,7 +59,10 @@ def main() -> None:
             generation_seconds = time.perf_counter() - generation_start
             output.parent.mkdir(parents=True, exist_ok=True)
             audio_duration = save_audio(waveform, model.sr, output)
-            emit({"kind": "result", "id": request_id, "audioDuration": audio_duration, "generationSeconds": generation_seconds})
+            emit({
+                "kind": "result", "id": request_id, "audioDuration": audio_duration,
+                "generationSeconds": generation_seconds, "peakVramMb": peak_memory_mb(device),
+            })
         except Exception:
             emit({"kind": "error", "id": request.get("id") if "request" in locals() else None, "error": traceback.format_exc(limit=3)})
 

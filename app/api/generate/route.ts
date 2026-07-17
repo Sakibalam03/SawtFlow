@@ -2,15 +2,15 @@ import { ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { existsSync, mkdirSync } from "fs";
 import { NextResponse } from "next/server";
 import path from "path";
+import { appendRun, root, uiOutput } from "../../../lib/ui-evidence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type StartupMetrics = { loadSeconds: number; conditioningSeconds: number; startupSeconds: number };
-type PendingRequest = { resolve: (value: { audioDuration: number; generationSeconds: number }) => void; reject: (error: Error) => void };
+type PendingRequest = { resolve: (value: { audioDuration: number; generationSeconds: number; peakVramMb: number | null }) => void; reject: (error: Error) => void };
 type WorkerStore = { child?: ChildProcessWithoutNullStreams; ready?: Promise<StartupMetrics>; resolveReady?: (metrics: StartupMetrics) => void; rejectReady?: (error: Error) => void; buffer: string; diagnostics: string[]; pending: Map<string, PendingRequest>; metrics?: StartupMetrics; startupStartedAt?: number; firstRequest: boolean };
 
-const root = process.cwd();
 const globalWorker = globalThis as typeof globalThis & { infiniaTurboWorker?: WorkerStore };
 if (!globalWorker.infiniaTurboWorker) globalWorker.infiniaTurboWorker = { buffer: "", diagnostics: [], pending: new Map(), firstRequest: true };
 const worker: WorkerStore = globalWorker.infiniaTurboWorker;
@@ -29,7 +29,7 @@ function resetWorker(error: Error) {
   worker.firstRequest = true;
 }
 
-function handleWorkerMessage(message: { kind?: string; id?: string; error?: string; loadSeconds?: number; conditioningSeconds?: number; audioDuration?: number; generationSeconds?: number }) {
+function handleWorkerMessage(message: { kind?: string; id?: string; error?: string; loadSeconds?: number; conditioningSeconds?: number; audioDuration?: number; generationSeconds?: number; peakVramMb?: number | null }) {
   if (message.kind === "ready") {
     const metrics = { loadSeconds: message.loadSeconds || 0, conditioningSeconds: message.conditioningSeconds || 0, startupSeconds: worker.startupStartedAt ? (Date.now() - worker.startupStartedAt) / 1000 : 0 };
     worker.metrics = metrics;
@@ -46,7 +46,7 @@ function handleWorkerMessage(message: { kind?: string; id?: string; error?: stri
   const pending = worker.pending.get(message.id);
   if (!pending) return;
   worker.pending.delete(message.id);
-  if (message.kind === "result") pending.resolve({ audioDuration: message.audioDuration || 0, generationSeconds: message.generationSeconds || 0 });
+  if (message.kind === "result") pending.resolve({ audioDuration: message.audioDuration || 0, generationSeconds: message.generationSeconds || 0, peakVramMb: message.peakVramMb ?? null });
   else pending.reject(new Error(message.error || "Chatterbox Turbo could not generate audio."));
 }
 
@@ -82,7 +82,7 @@ async function generate(text: string, output: string) {
   await ensureWorker();
   if (!worker.child) throw new Error("Chatterbox Turbo worker is unavailable.");
   const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const result = await new Promise<{ audioDuration: number; generationSeconds: number }>((resolve, reject) => {
+  const result = await new Promise<{ audioDuration: number; generationSeconds: number; peakVramMb: number | null }>((resolve, reject) => {
     worker.pending.set(id, { resolve, reject });
     worker.child?.stdin.write(`${JSON.stringify({ id, text, output })}\n`);
   });
@@ -103,23 +103,27 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (generationInProgress) return NextResponse.json({ error: "Audio generation is already in progress." }, { status: 409 });
-  const body = await request.json().catch(() => ({})) as { text?: unknown };
+  const body = await request.json().catch(() => ({})) as { text?: unknown; category?: unknown };
   const text = typeof body.text === "string" ? body.text.trim() : "";
+  const category = typeof body.category === "string" && ["free_text", "latency", "names_numbers", "prosody"].includes(body.category) ? body.category : "free_text";
   if (!text) return NextResponse.json({ error: "Enter text to generate audio." }, { status: 400 });
   if (text.length > 1000) return NextResponse.json({ error: "Text must be 1,000 characters or fewer." }, { status: 400 });
 
-  const outputDir = path.join(root, "outputs", "ui");
+  const outputDir = uiOutput;
   mkdirSync(outputDir, { recursive: true });
-  const filename = `voice-${Date.now()}.wav`;
+  const runId = `ui-turbo-en-${Date.now()}`;
+  const filename = `${runId}.wav`;
   const output = path.join(outputDir, filename);
   generationInProgress = true;
   try {
     const result = await generate(text, output);
     if (!existsSync(output)) throw new Error("Chatterbox Turbo completed without creating a WAV.");
-    return NextResponse.json({ audioUrl: `/api/audio?file=${encodeURIComponent(filename)}`, ...result });
+    appendRun({ runId, createdAt: new Date().toISOString(), model: "chatterbox-turbo", language: "en", category, text, audioFile: filename, status: "ok", audioSeconds: result.audioDuration, generationSeconds: result.generationSeconds, fullClipLatencySeconds: result.generationSeconds, rtf: result.audioDuration ? result.generationSeconds / result.audioDuration : undefined, peakVramMb: result.peakVramMb, ttfaMode: "not_measured_batch_api", startupSeconds: result.startup?.startupSeconds, referenceAudio: "data/references/reference.wav" });
+    return NextResponse.json({ runId, audioUrl: `/api/audio?file=${encodeURIComponent(filename)}`, ...result });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Chatterbox Turbo could not generate audio.";
     const hint = detail.includes("ENOENT") ? " Conda was not found; set INFINIA_CONDA_EXE to your conda executable path." : "";
+    appendRun({ runId, createdAt: new Date().toISOString(), model: "chatterbox-turbo", language: "en", category, text, status: "error", error: `${detail}${hint}`, ttfaMode: "not_measured_batch_api", referenceAudio: "data/references/reference.wav" });
     return NextResponse.json({ error: `${detail}${hint}` }, { status: 500 });
   } finally {
     generationInProgress = false;
