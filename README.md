@@ -24,6 +24,11 @@ as streaming TTFA.
 - The exact spoken transcript in `configs/benchmark.yaml`.
 - Model access accepted where the upstream model requires it.
 
+The repository currently includes the consented test reference used for the
+smoke run. Its configured transcript is: “hello hello hello. this is a test.”
+Keep the consent/source record in `data/references/CONSENT_OR_SOURCE.md` with
+any replacement recording.
+
 Do not use closed TTS APIs for any benchmark WAV. Do not commit model weights,
 caches, tokens, or unrelated recordings.
 
@@ -37,6 +42,10 @@ conda run -n infinia-chatterbox python src/run_chatterbox.py --variant turbo --r
 conda run -n infinia-xtts python src/run_xtts.py --repetitions 1 --warmup-runs 0
 conda run -n infinia-indicf5 python src/run_indicf5.py --repetitions 1 --warmup-runs 0
 ```
+
+The Chatterbox environment resolves PyTorch and TorchAudio 2.6.0 from the CUDA
+12.6 wheel index. Use a CUDA-compatible NVIDIA driver on the benchmark host;
+the pinned packages are declared in `envs/chatterbox.yml`.
 
 After smoke tests, clear or archive their JSONL and WAV output in a separately
 named evidence directory, then use the configured one warm-up and three
@@ -54,6 +63,8 @@ conda run -n infinia-eval python scripts/validate_submission.py
 ```
 
 From PowerShell, `scripts/run_all.ps1 -Mode smoke` runs the four smoke commands.
+Smoke-run artifacts are retained under `outputs/smoke*/` for debugging and
+reproducibility; they are not benchmark evidence.
 
 ## Evidence outputs
 

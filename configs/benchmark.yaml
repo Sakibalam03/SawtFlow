@@ -4,7 +4,7 @@ precision: float16
 warmup_runs: 1
 repetitions: 3
 reference_audio: data/references/reference.wav
-reference_transcript: "EXACT WORDS SPOKEN IN reference.wav"
+reference_transcript: "hello hello hello. this is a test"
 reference_language: en
 output_root: outputs
 models:
