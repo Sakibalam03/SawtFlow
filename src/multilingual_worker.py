@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import traceback
@@ -17,6 +18,11 @@ def emit(payload: dict) -> None:
 
 def main() -> None:
     try:
+        # The installed Chatterbox package forwards HF_TOKEN directly to
+        # snapshot_download. An empty value becomes the invalid HTTP header
+        # ``Bearer ``; omit blank tokens and use anonymous public download.
+        if not os.environ.get("HF_TOKEN", "").strip():
+            os.environ.pop("HF_TOKEN", None)
         config = load_config("configs/benchmark.yaml")
         reference = resolve_path(config["reference_audio"])
         if not reference.is_file():
