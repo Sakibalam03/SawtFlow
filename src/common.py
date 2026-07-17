@@ -34,6 +34,7 @@ def parse_runner_args(description: str, include_variant: bool = False) -> argpar
     parser.add_argument("--warmup-runs", type=int)
     parser.add_argument("--device")
     parser.add_argument("--output-root")
+    parser.add_argument("--languages", nargs="+", choices=["en", "ar", "hi"])
     if include_variant:
         parser.add_argument("--variant", choices=["mtl-v3", "turbo"])
     return parser.parse_args()
@@ -58,6 +59,7 @@ def effective_config(config: dict[str, Any], args: argparse.Namespace) -> dict[s
         "warmup_runs": args.warmup_runs,
         "device": args.device,
         "output_root": args.output_root,
+        "languages": args.languages,
     }.items():
         if value is not None:
             result[key] = value
@@ -213,7 +215,12 @@ def run_model(
     """Run all prompts sequentially and retain an immutable row for every attempt."""
     seed_everything(int(config["seed"]))
     reference = validate_reference(config)
-    prompts = read_prompts(config, languages)
+    supported_languages = set(languages)
+    requested_languages = set(config.get("languages") or supported_languages)
+    unsupported = requested_languages - supported_languages
+    if unsupported:
+        raise ValueError(f"{model_name} does not support requested language(s): {sorted(unsupported)}")
+    prompts = read_prompts(config, requested_languages)
     output_root = resolve_path(config["output_root"])
     raw_path = output_root / "raw" / "benchmark.jsonl"
     device = str(config["device"])

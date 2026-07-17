@@ -32,7 +32,7 @@ caches, tokens, or unrelated recordings.
 ```bash
 bash scripts/create_envs.sh
 conda run -n infinia-chatterbox bash scripts/capture_system.sh chatterbox
-conda run -n infinia-chatterbox python src/run_chatterbox.py --variant mtl-v3 --repetitions 1 --warmup-runs 0
+conda run -n infinia-chatterbox python src/run_chatterbox.py --variant mtl-v3 --languages en --repetitions 1 --warmup-runs 0
 conda run -n infinia-chatterbox python src/run_chatterbox.py --variant turbo --repetitions 1 --warmup-runs 0
 conda run -n infinia-xtts python src/run_xtts.py --repetitions 1 --warmup-runs 0
 conda run -n infinia-indicf5 python src/run_indicf5.py --repetitions 1 --warmup-runs 0
@@ -66,4 +66,3 @@ From PowerShell, `scripts/run_all.ps1 -Mode smoke` runs the four smoke commands.
 
 XTTS-v2 is evaluated under its CPML terms and is not automatically commercially
 deployable. A quality result never overrides license restrictions.
-
