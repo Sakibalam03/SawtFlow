@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 
 export const root = process.cwd();
@@ -6,9 +6,19 @@ export const uiOutput = path.join(root, "outputs", "ui");
 const runsPath = path.join(uiOutput, "runs.jsonl");
 const evaluationsPath = path.join(uiOutput, "evaluations.jsonl");
 const ratingsPath = path.join(uiOutput, "ratings.jsonl");
+const session = globalThis as typeof globalThis & { infiniaUiEvidenceSession?: boolean };
+
+// A dev/server launch starts a clean, comparable run-history session. The
+// global guard avoids clearing data again during route compilation or HMR.
+export function ensureUiEvidenceSession() {
+  if (session.infiniaUiEvidenceSession) return;
+  mkdirSync(uiOutput, { recursive: true });
+  for (const file of [runsPath, evaluationsPath, ratingsPath]) writeFileSync(file, "", "utf8");
+  session.infiniaUiEvidenceSession = true;
+}
 
 export type UiRun = {
-  runId: string; createdAt: string; model: "chatterbox-turbo"; language: "en"; category: string; text: string;
+  runId: string; createdAt: string; model: "chatterbox-turbo" | "chatterbox-multilingual"; language: "en" | "hi" | "ar"; category: string; text: string;
   audioFile?: string; status: "ok" | "error"; error?: string; audioSeconds?: number; generationSeconds?: number;
   fullClipLatencySeconds?: number; rtf?: number; peakVramMb?: number | null; ttfaMode: "not_measured_batch_api";
   startupSeconds?: number; referenceAudio: string;
@@ -17,10 +27,11 @@ export type UiEvaluation = { runId: string; createdAt: string; status: "ok" | "e
 export type UiRating = { runId: string; createdAt: string; listenerId: string; naturalness: number; speakerJudgment: "same" | "unsure" | "different"; comment?: string };
 
 function rows<T>(file: string): T[] {
+  ensureUiEvidenceSession();
   if (!existsSync(file)) return [];
   return readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).flatMap(line => { try { return [JSON.parse(line) as T]; } catch { return []; } });
 }
-function append(file: string, row: object) { mkdirSync(uiOutput, { recursive: true }); appendFileSync(file, `${JSON.stringify(row)}\n`, "utf8"); }
+function append(file: string, row: object) { ensureUiEvidenceSession(); appendFileSync(file, `${JSON.stringify(row)}\n`, "utf8"); }
 const round = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
 const values = (items: Array<number | null | undefined>) => items.filter((item): item is number => typeof item === "number" && Number.isFinite(item));
 const mean = (items: number[]) => items.length ? round(items.reduce((sum, item) => sum + item, 0) / items.length) : null;

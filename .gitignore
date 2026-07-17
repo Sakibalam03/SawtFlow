@@ -12,6 +12,7 @@ outputs/ui/
 outputs/raw/
 outputs/eval/*.csv
 outputs/eval/*KEY.csv
+outputs/eval/speechbrain-ecapa/
 evidence/pip-freeze-*.txt
 evidence/system_info_*.txt
 *.log

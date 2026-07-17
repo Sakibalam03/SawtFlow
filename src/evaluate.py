@@ -23,10 +23,13 @@ def successful_rows(raw_path: Path) -> list[dict[str, Any]]:
         ]
 
 
-def load_asr(config: dict[str, Any]):
+def load_asr(config: dict[str, Any], device: str | None = None):
     from faster_whisper import WhisperModel
 
     asr = config["asr"]
+    if device:
+        compute_type = asr["compute_type"] if device == "cuda" else "int8"
+        return WhisperModel(asr["model"], device=device, compute_type=compute_type)
     try:
         return WhisperModel(asr["model"], device="cuda", compute_type=asr["compute_type"])
     except Exception:
@@ -41,19 +44,33 @@ def transcribe(model: Any, audio_path: Path, language: str, config: dict[str, An
     return " ".join(segment.text.strip() for segment in segments).strip()
 
 
-def load_speaker_encoder(config: dict[str, Any]):
+def load_speaker_encoder(config: dict[str, Any], device: str = "cpu"):
     from speechbrain.inference.speaker import EncoderClassifier
+    from speechbrain.utils.fetching import LocalStrategy
 
-    return EncoderClassifier.from_hparams(source=config["speaker_embedding"]["model"], savedir=str(ROOT / "outputs/eval/speechbrain-ecapa"))
+    # SpeechBrain uses symbolic links by default. Windows creates those only
+    # with an additional user privilege, so use an ordinary cache copy instead.
+    return EncoderClassifier.from_hparams(
+        source=config["speaker_embedding"]["model"],
+        savedir=str(ROOT / "outputs/eval/speechbrain-ecapa"),
+        local_strategy=LocalStrategy.COPY,
+        run_opts={"device": device},
+    )
 
 
 def embedding(encoder: Any, audio_path: Path):
     import torch
-    import torchaudio
+    import soundfile as sf
 
-    signal, sample_rate = torchaudio.load(str(audio_path))
+    # torchaudio 2.8 delegates loading to TorchCodec, which is not part of
+    # the evaluation environment. SoundFile reads WAV directly and keeps this
+    # metric independent of that optional codec package.
+    samples, sample_rate = sf.read(str(audio_path), dtype="float32", always_2d=True)
+    signal = torch.from_numpy(samples.T)
     signal = signal.mean(dim=0, keepdim=True)
     if sample_rate != 16000:
+        import torchaudio
+
         signal = torchaudio.functional.resample(signal, sample_rate, 16000)
     return encoder.encode_batch(signal).squeeze()
 
@@ -112,4 +129,3 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/benchmark.yaml")
     print(evaluate(parser.parse_args().config))
-

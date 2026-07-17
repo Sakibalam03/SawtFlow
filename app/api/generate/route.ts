@@ -1,131 +1,27 @@
 import { ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { existsSync, mkdirSync } from "fs";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { appendRun, root, uiOutput } from "../../../lib/ui-evidence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type StartupMetrics = { loadSeconds: number; conditioningSeconds: number; startupSeconds: number };
-type PendingRequest = { resolve: (value: { audioDuration: number; generationSeconds: number; peakVramMb: number | null }) => void; reject: (error: Error) => void };
-type WorkerStore = { child?: ChildProcessWithoutNullStreams; ready?: Promise<StartupMetrics>; resolveReady?: (metrics: StartupMetrics) => void; rejectReady?: (error: Error) => void; buffer: string; diagnostics: string[]; pending: Map<string, PendingRequest>; metrics?: StartupMetrics; startupStartedAt?: number; firstRequest: boolean };
-
-const globalWorker = globalThis as typeof globalThis & { infiniaTurboWorker?: WorkerStore };
-if (!globalWorker.infiniaTurboWorker) globalWorker.infiniaTurboWorker = { buffer: "", diagnostics: [], pending: new Map(), firstRequest: true };
-const worker: WorkerStore = globalWorker.infiniaTurboWorker;
+type Language = "en" | "hi" | "ar";
+type WorkerKind = "turbo" | "multilingual";
+type Startup = { loadSeconds: number; conditioningSeconds: number; startupSeconds: number };
+type Pending = { resolve: (value: { audioDuration: number; generationSeconds: number; peakVramMb: number | null }) => void; reject: (reason: Error) => void };
+type Store = { child?: ChildProcessWithoutNullStreams; ready?: Promise<Startup>; resolveReady?: (value: Startup) => void; rejectReady?: (reason: Error) => void; buffer: string; diagnostics: string[]; pending: Map<string, Pending>; startupStartedAt?: number; firstRequest: boolean; metrics?: Startup };
+const runtimeWorkers = globalThis as typeof globalThis & { infiniaVoiceWorkers?: Record<WorkerKind, Store> };
+if (!runtimeWorkers.infiniaVoiceWorkers) runtimeWorkers.infiniaVoiceWorkers = { turbo: { buffer: "", diagnostics: [], pending: new Map(), firstRequest: true }, multilingual: { buffer: "", diagnostics: [], pending: new Map(), firstRequest: true } };
+const workers = runtimeWorkers.infiniaVoiceWorkers;
 let generationInProgress = false;
 
-function resetWorker(error: Error) {
-  worker.rejectReady?.(error);
-  for (const pending of worker.pending.values()) pending.reject(error);
-  worker.pending.clear();
-  worker.child = undefined;
-  worker.ready = undefined;
-  worker.resolveReady = undefined;
-  worker.rejectReady = undefined;
-  worker.metrics = undefined;
-  worker.startupStartedAt = undefined;
-  worker.firstRequest = true;
-}
-
-function handleWorkerMessage(message: { kind?: string; id?: string; error?: string; loadSeconds?: number; conditioningSeconds?: number; audioDuration?: number; generationSeconds?: number; peakVramMb?: number | null }) {
-  if (message.kind === "ready") {
-    const metrics = { loadSeconds: message.loadSeconds || 0, conditioningSeconds: message.conditioningSeconds || 0, startupSeconds: worker.startupStartedAt ? (Date.now() - worker.startupStartedAt) / 1000 : 0 };
-    worker.metrics = metrics;
-    worker.resolveReady?.(metrics);
-    worker.resolveReady = undefined;
-    worker.rejectReady = undefined;
-    return;
-  }
-  if (message.kind === "startup_error") {
-    resetWorker(new Error(message.error || "Chatterbox Turbo could not start."));
-    return;
-  }
-  if (!message.id) return;
-  const pending = worker.pending.get(message.id);
-  if (!pending) return;
-  worker.pending.delete(message.id);
-  if (message.kind === "result") pending.resolve({ audioDuration: message.audioDuration || 0, generationSeconds: message.generationSeconds || 0, peakVramMb: message.peakVramMb ?? null });
-  else pending.reject(new Error(message.error || "Chatterbox Turbo could not generate audio."));
-}
-
-function handleWorkerOutput(chunk: Buffer) {
-  worker.buffer += chunk.toString();
-  let newline = worker.buffer.indexOf("\n");
-  while (newline >= 0) {
-    const line = worker.buffer.slice(0, newline).trim();
-    worker.buffer = worker.buffer.slice(newline + 1);
-    if (line.startsWith("INFINIA_WORKER=")) {
-      try { handleWorkerMessage(JSON.parse(line.slice("INFINIA_WORKER=".length))); } catch { worker.diagnostics.push(line); }
-    } else if (line) worker.diagnostics = [...worker.diagnostics, line].slice(-30);
-    newline = worker.buffer.indexOf("\n");
-  }
-}
-
-function ensureWorker() {
-  if (worker.ready) return worker.ready;
-  const conda = process.env.INFINIA_CONDA_EXE || process.env.CONDA_EXE || (process.platform === "win32" ? "conda.exe" : "conda");
-  const script = path.join(root, "src", "turbo_worker.py");
-  worker.startupStartedAt = Date.now();
-  worker.ready = new Promise<StartupMetrics>((resolve, reject) => { worker.resolveReady = resolve; worker.rejectReady = reject; });
-  const child = spawn(conda, ["run", "--no-capture-output", "-n", "infinia-chatterbox", "python", script], { cwd: root, windowsHide: true });
-  worker.child = child;
-  child.stdout.on("data", handleWorkerOutput);
-  child.stderr.on("data", chunk => { worker.diagnostics = [...worker.diagnostics, chunk.toString().trim()].filter(Boolean).slice(-30); });
-  child.on("error", error => resetWorker(error));
-  child.on("close", code => { if (worker.child === child) resetWorker(new Error(`Chatterbox Turbo worker exited with code ${code}.`)); });
-  return worker.ready;
-}
-
-async function generate(text: string, output: string) {
-  await ensureWorker();
-  if (!worker.child) throw new Error("Chatterbox Turbo worker is unavailable.");
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const result = await new Promise<{ audioDuration: number; generationSeconds: number; peakVramMb: number | null }>((resolve, reject) => {
-    worker.pending.set(id, { resolve, reject });
-    worker.child?.stdin.write(`${JSON.stringify({ id, text, output })}\n`);
-  });
-  const startup = worker.firstRequest ? worker.metrics : undefined;
-  worker.firstRequest = false;
-  return { ...result, startup };
-}
-
-export async function GET() {
-  try {
-    const metrics = await ensureWorker();
-    return NextResponse.json({ status: "ready", ...metrics });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Chatterbox Turbo could not start.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  if (generationInProgress) return NextResponse.json({ error: "Audio generation is already in progress." }, { status: 409 });
-  const body = await request.json().catch(() => ({})) as { text?: unknown; category?: unknown };
-  const text = typeof body.text === "string" ? body.text.trim() : "";
-  const category = typeof body.category === "string" && ["free_text", "latency", "names_numbers", "prosody"].includes(body.category) ? body.category : "free_text";
-  if (!text) return NextResponse.json({ error: "Enter text to generate audio." }, { status: 400 });
-  if (text.length > 1000) return NextResponse.json({ error: "Text must be 1,000 characters or fewer." }, { status: 400 });
-
-  const outputDir = uiOutput;
-  mkdirSync(outputDir, { recursive: true });
-  const runId = `ui-turbo-en-${Date.now()}`;
-  const filename = `${runId}.wav`;
-  const output = path.join(outputDir, filename);
-  generationInProgress = true;
-  try {
-    const result = await generate(text, output);
-    if (!existsSync(output)) throw new Error("Chatterbox Turbo completed without creating a WAV.");
-    appendRun({ runId, createdAt: new Date().toISOString(), model: "chatterbox-turbo", language: "en", category, text, audioFile: filename, status: "ok", audioSeconds: result.audioDuration, generationSeconds: result.generationSeconds, fullClipLatencySeconds: result.generationSeconds, rtf: result.audioDuration ? result.generationSeconds / result.audioDuration : undefined, peakVramMb: result.peakVramMb, ttfaMode: "not_measured_batch_api", startupSeconds: result.startup?.startupSeconds, referenceAudio: "data/references/reference.wav" });
-    return NextResponse.json({ runId, audioUrl: `/api/audio?file=${encodeURIComponent(filename)}`, ...result });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : "Chatterbox Turbo could not generate audio.";
-    const hint = detail.includes("ENOENT") ? " Conda was not found; set INFINIA_CONDA_EXE to your conda executable path." : "";
-    appendRun({ runId, createdAt: new Date().toISOString(), model: "chatterbox-turbo", language: "en", category, text, status: "error", error: `${detail}${hint}`, ttfaMode: "not_measured_batch_api", referenceAudio: "data/references/reference.wav" });
-    return NextResponse.json({ error: `${detail}${hint}` }, { status: 500 });
-  } finally {
-    generationInProgress = false;
-  }
-}
+const kindFor = (language: Language): WorkerKind => language === "en" ? "turbo" : "multilingual";
+const modelFor = (language: Language) => language === "en" ? "chatterbox-turbo" : "chatterbox-multilingual";
+function reset(kind: WorkerKind, error: Error) { const worker = workers[kind]; worker.rejectReady?.(error); for (const pending of worker.pending.values()) pending.reject(error); worker.pending.clear(); worker.child = undefined; worker.ready = undefined; worker.resolveReady = undefined; worker.rejectReady = undefined; worker.metrics = undefined; worker.startupStartedAt = undefined; worker.firstRequest = true; }
+function handle(kind: WorkerKind, message: { kind?: string; id?: string; error?: string; loadSeconds?: number; conditioningSeconds?: number; audioDuration?: number; generationSeconds?: number; peakVramMb?: number | null }) { const worker = workers[kind]; if (message.kind === "ready") { const metrics = { loadSeconds: message.loadSeconds || 0, conditioningSeconds: message.conditioningSeconds || 0, startupSeconds: worker.startupStartedAt ? (Date.now() - worker.startupStartedAt) / 1000 : 0 }; worker.metrics = metrics; worker.resolveReady?.(metrics); worker.resolveReady = undefined; worker.rejectReady = undefined; return; } if (message.kind === "startup_error") { reset(kind, new Error(message.error || "Voice worker could not start.")); return; } if (!message.id) return; const pending = worker.pending.get(message.id); if (!pending) return; worker.pending.delete(message.id); message.kind === "result" ? pending.resolve({ audioDuration: message.audioDuration || 0, generationSeconds: message.generationSeconds || 0, peakVramMb: message.peakVramMb ?? null }) : pending.reject(new Error(message.error || "Voice generation failed.")); }
+function output(kind: WorkerKind, chunk: Buffer) { const worker = workers[kind]; worker.buffer += chunk.toString(); let newline = worker.buffer.indexOf("\n"); while (newline >= 0) { const line = worker.buffer.slice(0, newline).trim(); worker.buffer = worker.buffer.slice(newline + 1); if (line.startsWith("INFINIA_WORKER=")) { try { handle(kind, JSON.parse(line.slice("INFINIA_WORKER=".length))); } catch { worker.diagnostics.push(line); } } else if (line) worker.diagnostics = [...worker.diagnostics, line].slice(-30); newline = worker.buffer.indexOf("\n"); } }
+function ensure(kind: WorkerKind) { const worker = workers[kind]; if (worker.ready) return worker.ready; const conda = process.env.INFINIA_CONDA_EXE || process.env.CONDA_EXE || (process.platform === "win32" ? "conda.exe" : "conda"); const script = path.join(root, "src", kind === "turbo" ? "turbo_worker.py" : "multilingual_worker.py"); worker.startupStartedAt = Date.now(); worker.ready = new Promise<Startup>((resolve, reject) => { worker.resolveReady = resolve; worker.rejectReady = reject; }); const child = spawn(conda, ["run", "--no-capture-output", "-n", "infinia-chatterbox", "python", script], { cwd: root, windowsHide: true }); worker.child = child; child.stdout.on("data", chunk => output(kind, chunk)); child.stderr.on("data", chunk => { worker.diagnostics = [...worker.diagnostics, chunk.toString().trim()].filter(Boolean).slice(-30); }); child.on("error", error => reset(kind, error)); child.on("close", code => { if (worker.child === child) reset(kind, new Error(`Voice worker exited with code ${code}.`)); }); return worker.ready; }
+async function generate(language: Language, text: string, outputFile: string) { const kind = kindFor(language), worker = workers[kind]; await ensure(kind); if (!worker.child) throw new Error("Voice worker is unavailable."); const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`; const result = await new Promise<{ audioDuration: number; generationSeconds: number; peakVramMb: number | null }>((resolve, reject) => { worker.pending.set(id, { resolve, reject }); worker.child?.stdin.write(`${JSON.stringify({ id, text, language, output: outputFile })}\n`); }); const startup = worker.firstRequest ? worker.metrics : undefined; worker.firstRequest = false; return { ...result, startup }; }
+export async function GET(request: NextRequest) { const language = request.nextUrl.searchParams.get("language") === "ar" ? "ar" : request.nextUrl.searchParams.get("language") === "hi" ? "hi" : "en"; try { return NextResponse.json({ status: "ready", language, ...(await ensure(kindFor(language))) }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Voice worker could not start." }, { status: 500 }); } }
+export async function POST(request: Request) { if (generationInProgress) return NextResponse.json({ error: "Audio generation is already in progress." }, { status: 409 }); const body = await request.json().catch(() => ({})) as { text?: unknown; category?: unknown; language?: unknown }; const text = typeof body.text === "string" ? body.text.trim() : ""; const language: Language = body.language === "ar" || body.language === "hi" ? body.language : "en"; const category = typeof body.category === "string" && ["free_text", "latency", "names_numbers", "prosody"].includes(body.category) ? body.category : "free_text"; if (!text) return NextResponse.json({ error: "Enter text to generate audio." }, { status: 400 }); if (text.length > 1000) return NextResponse.json({ error: "Text must be 1,000 characters or fewer." }, { status: 400 }); mkdirSync(uiOutput, { recursive: true }); const model = modelFor(language), runId = `ui-${language}-${Date.now()}`, filename = `${runId}.wav`, outputFile = path.join(uiOutput, filename); generationInProgress = true; try { const result = await generate(language, text, outputFile); if (!existsSync(outputFile)) throw new Error("Voice worker completed without creating a WAV."); appendRun({ runId, createdAt: new Date().toISOString(), model, language, category, text, audioFile: filename, status: "ok", audioSeconds: result.audioDuration, generationSeconds: result.generationSeconds, fullClipLatencySeconds: result.generationSeconds, rtf: result.audioDuration ? result.generationSeconds / result.audioDuration : undefined, peakVramMb: result.peakVramMb, ttfaMode: "not_measured_batch_api", startupSeconds: result.startup?.startupSeconds, referenceAudio: "data/references/reference.wav" }); return NextResponse.json({ runId, language, model, audioUrl: `/api/audio?file=${encodeURIComponent(filename)}`, ...result }); } catch (error) { const detail = error instanceof Error ? error.message : "Voice generation failed."; appendRun({ runId, createdAt: new Date().toISOString(), model, language, category, text, status: "error", error: detail, ttfaMode: "not_measured_batch_api", referenceAudio: "data/references/reference.wav" }); return NextResponse.json({ error: detail }, { status: 500 }); } finally { generationInProgress = false; } }
