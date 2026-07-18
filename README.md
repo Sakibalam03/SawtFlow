@@ -38,9 +38,9 @@ default protocol is one warm-up and three measured repetitions per prompt.
 
 | Language | Baseline | Challenger | CLI worker |
 |---|---|---|---|
-| English | Chatterbox Multilingual V3 | Chatterbox Turbo | `src/run_chatterbox.py` |
-| Arabic (MSA) | Chatterbox Multilingual V3 | XTTS-v2 | `src/run_chatterbox.py`, `src/run_xtts.py` |
-| Hindi | Chatterbox Multilingual V3 | AI4Bharat IndicF5 | `src/run_chatterbox.py`, `src/run_indicf5.py` |
+| English | Chatterbox Multilingual V2 | Chatterbox Turbo | `src/run_chatterbox.py` |
+| Arabic (MSA) | Chatterbox Multilingual V2 | XTTS-v2 | `src/run_chatterbox.py`, `src/run_xtts.py` |
+| Hindi | Chatterbox Multilingual V2 | AI4Bharat IndicF5 | `src/run_chatterbox.py`, `src/run_indicf5.py` |
 
 The interactive UI uses Chatterbox Turbo for English and Chatterbox
 Multilingual for Arabic/Hindi. XTTS-v2 and IndicF5 comparisons are performed
