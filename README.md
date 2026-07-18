@@ -85,29 +85,27 @@ relying on aggregate metrics alone.
 
 ### Results against Section 3
 
-The repository does **not** yet contain a completed six-condition benchmark:
-there are no committed objective-evaluation CSVs or blinded listener ratings.
-Accordingly, the table below does not invent MOS, cosine, WER, or A/B results.
-`—` means not measured; `not demonstrated` is different from a passing
-streaming result.
+The repository does **not** yet contain a completed six-condition benchmark.
+The observed UI values below are retained as single-run evidence only; they do
+not replace the fixed-prompt, repeated, blinded benchmark protocol. `—` means
+not measured; `not demonstrated` is different from a passing streaming result.
 
 | Language | Model | MOS | Speaker cosine / human A/B | Short-prompt full clip | TTFA | RTF | WER | Section 3 status |
 |---|---|---:|---|---:|---|---:|---:|---|
-| English | Chatterbox Turbo | — | — | 9.672 s* | Not demonstrated (batch API) | 2.325* | — | Incomplete; observed smoke latency and RTF miss targets |
-| English | Chatterbox Multilingual V3 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
-| Arabic | Chatterbox Multilingual V3 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
+| English | Chatterbox Turbo | 4.00 / 5† | 0.823 / 1 of 1 same† | 2.66 s† | Not demonstrated (batch API) | 0.67† | 9.1%† | Incomplete; one UI run, latency and RTF miss targets |
+| English | Chatterbox Multilingual V2 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
+| Arabic | Chatterbox Multilingual V2 | 4.00 / 5† | 0.796 / 1 of 1 same† | 9.85 s† | Not demonstrated (batch API) | 1.55† | 0.0%† | Incomplete; one UI run, latency and RTF miss targets |
 | Arabic | XTTS-v2 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
-| Hindi | Chatterbox Multilingual V3 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
+| Hindi | Chatterbox Multilingual V2 | 4.00 / 5† | 0.757 / 1 of 1 same† | 46.31 s† | Not demonstrated (batch API) | 8.30† | 50.0%† | Incomplete; one UI run, latency, RTF, and WER miss targets |
 | Hindi | IndicF5 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
 
-\* From the retained, one-repetition English Turbo smoke record at
-`outputs/smoke-turbo-final/raw/benchmark.jsonl`, on the latency prompt only.
-It is useful as a reproducibility sample, not a final model comparison: no
-warm-up was used, only one prompt/repetition is represented for this latency
-cell, and no objective or human evaluation accompanied it. The 4.16-second
-clip was generated in 9.671831 seconds (RTF 2.324959). The default benchmark
-uses batch APIs, so `ttfa_s` is intentionally `null`; full-clip latency must
-never be reported as streaming TTFA.
+† Observed in the local UI on an NVIDIA GeForce RTX 3050 Laptop GPU, using one
+free-text generation per condition. MOS and the same-speaker result each come
+from one listener and are not blinded A/B evidence. The full-clip values are
+not the versioned short-latency benchmark prompt, and therefore cannot support
+a Section 3 pass claim. The default benchmark uses batch APIs, so `ttfa_s` is
+intentionally `null`; full-clip latency must never be reported as streaming
+TTFA.
 
 When a full run is complete, regenerate
 `outputs/eval/results_summary.csv` and copy its values into
