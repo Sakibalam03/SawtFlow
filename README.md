@@ -98,7 +98,6 @@ not measured; `not demonstrated` is different from a passing streaming result.
 | English | Chatterbox Turbo | 4.00 / 5† | 0.823 / 1 of 1 same† | 2.66 s† | Not demonstrated (batch API) | 0.67† | 9.1%† | Incomplete; one UI run, latency and RTF miss targets |
 | English | Chatterbox Multilingual V2 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
 | Arabic | Chatterbox Multilingual V2 | 4.00 / 5† | 0.796 / 1 of 1 same† | 9.85 s† | Not demonstrated (batch API) | 1.55† | 0.0%† | Incomplete; one UI run, latency and RTF miss targets |
-| Arabic | XTTS-v2 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
 | Hindi | Chatterbox Multilingual V2 | 4.00 / 5† | 0.757 / 1 of 1 same† | 46.31 s† | Not demonstrated (batch API) | 8.30† | 50.0%† | Incomplete; one UI run, latency, RTF, and WER miss targets |
 | Hindi | IndicF5 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
 
