@@ -58,6 +58,7 @@ replacing the checked-in project reference.
 | `configs/benchmark.yaml` | Seed, device, reference, prompt-run counts, model set, and evaluator configuration. |
 | `configs/tts-pipelines.json` | UI language-to-model, worker, Conda environment, default, and fallback mapping. |
 | `envs/` | Isolated Conda environments so model dependencies do not conflict. |
+| `requirements.txt` | Cross-environment pip dependency manifest; use `envs/*.yml` for actual model installation. |
 | `src/run_*.py` | Model-specific generation wrappers sharing the same timing and artifact logic. |
 | `src/evaluate.py` | Forced-language Faster-Whisper WER and ECAPA speaker-cosine evaluation. |
 | `src/make_listening_sheet.py` | Blinded absolute and paired A/B listening sheets. |

@@ -1,0 +1,40 @@
+# SawtFlow Python dependency manifest
+#
+# This project deliberately uses separate Conda environments because its model
+# stacks have incompatible Python/package constraints. Do not install every
+# item below into one environment and expect all models to work together.
+#
+# Recommended installation (the reproducible source of truth):
+#   conda env create --file envs/chatterbox.yml
+#   conda env create --file envs/xtts.yml
+#   conda env create --file envs/indicf5.yml
+#   conda env create --file envs/eval.yml
+#
+# This file lists the direct pip dependencies used across those environments,
+# which is useful for dependency scanners and manual setup.
+
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+# English / Arabic / Hindi Chatterbox workers (Python 3.11)
+chatterbox-tts
+torch==2.6.0+cu126
+torchaudio==2.6.0+cu126
+numpy
+PyYAML
+soundfile
+setuptools<81
+
+# Hindi IndicF5 worker (Python 3.10; use its dedicated environment)
+git+https://github.com/AI4Bharat/IndicF5.git
+numpy==1.26.4
+transformers==4.49.0
+
+# Arabic XTTS-v2 benchmark worker (Python 3.11)
+TTS
+
+# Objective evaluation and test tooling (Python 3.11)
+faster-whisper
+jiwer
+pandas
+pytest
+speechbrain
