@@ -1,0 +1,42 @@
+{
+  "en": {
+    "default": "chatterbox-turbo",
+    "models": {
+      "chatterbox-turbo": {
+        "label": "Chatterbox Turbo",
+        "worker": "turbo",
+        "environment": "infinia-chatterbox",
+        "runModel": "chatterbox-turbo"
+      }
+    }
+  },
+  "hi": {
+    "default": "indicf5",
+    "fallback": "chatterbox-multilingual-v2",
+    "models": {
+      "indicf5": {
+        "label": "IndicF5",
+        "worker": "indicf5",
+        "environment": "infinia-indicf5",
+        "runModel": "indicf5"
+      },
+      "chatterbox-multilingual-v2": {
+        "label": "Chatterbox Multilingual V2 (fallback)",
+        "worker": "multilingual",
+        "environment": "infinia-chatterbox",
+        "runModel": "chatterbox-multilingual"
+      }
+    }
+  },
+  "ar": {
+    "default": "chatterbox-multilingual-v2",
+    "models": {
+      "chatterbox-multilingual-v2": {
+        "label": "Chatterbox Multilingual V2",
+        "worker": "multilingual",
+        "environment": "infinia-chatterbox",
+        "runModel": "chatterbox-multilingual"
+      }
+    }
+  }
+}

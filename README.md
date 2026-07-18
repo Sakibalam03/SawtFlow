@@ -42,9 +42,12 @@ default protocol is one warm-up and three measured repetitions per prompt.
 | Arabic (MSA) | Chatterbox Multilingual V2 | XTTS-v2 | `src/run_chatterbox.py`, `src/run_xtts.py` |
 | Hindi | Chatterbox Multilingual V2 | AI4Bharat IndicF5 | `src/run_chatterbox.py`, `src/run_indicf5.py` |
 
-The interactive UI uses Chatterbox Turbo for English and Chatterbox
-Multilingual for Arabic/Hindi. XTTS-v2 and IndicF5 comparisons are performed
-through the benchmark CLI.
+The interactive UI uses Chatterbox Turbo for English, IndicF5 for Hindi, and
+Chatterbox Multilingual V2 for Arabic. Hindi automatically falls back to
+Chatterbox Multilingual V2 when IndicF5 cannot start. The language-to-model
+mapping, default, and fallback are centralized in
+`configs/tts-pipelines.json`, so a model can be changed without altering the
+route or UI code.
 
 ### Repository map
 
@@ -363,10 +366,12 @@ npm run dev
 ```
 
 Open the local URL printed by Next.js (normally `http://localhost:3000`). It
-starts Conda workers by name, so create `infinia-chatterbox` and `infinia-eval`
-first. If `conda` is not on the server process PATH, set `INFINIA_CONDA_EXE` to
-its executable. The UI reads `HF_TOKEN` from the process environment when
-needed.
+starts Conda workers by name, so create `infinia-chatterbox`,
+`infinia-indicf5`, and `infinia-eval` first. If `conda` is not on the server
+process PATH, set `INFINIA_CONDA_EXE` to its executable. IndicF5 is a gated
+Hugging Face model: accept its repository terms and place an authorized
+`HF_TOKEN` in `.env` before starting Next.js. Without it, Hindi remains
+available through the automatic Multilingual V2 fallback.
 
 The UI writes to `outputs/ui/`. A new dev/server session clears its three JSONL
 evidence logs (`runs.jsonl`, `evaluations.jsonl`, and `ratings.jsonl`) to begin

@@ -4,9 +4,11 @@ dependencies:
   - python=3.10
   - pip
   - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu126
       - git+https://github.com/AI4Bharat/IndicF5.git
-      - numpy
+      - numpy==1.26.4
       - pyyaml
       - soundfile
-      - torch
-      - transformers
+      - torch==2.6.0+cu126
+      - torchaudio==2.6.0+cu126
+      - transformers==4.49.0
