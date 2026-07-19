@@ -33,7 +33,7 @@ class Evaluator:
         # metric requests cannot evict or contend with the voice model.
         self.asr = load_asr(self.config, device="cpu")
         self.encoder = load_speaker_encoder(self.config, device="cpu")
-        self.reference = embedding(self.encoder, resolve_path(self.config["reference_audio"]))
+        self.references: dict[str, Any] = {}
         self.startup_seconds = time.perf_counter() - started
 
     def evaluate(self, run_id: str) -> dict[str, Any]:
@@ -49,6 +49,12 @@ class Evaluator:
             audio = ROOT / "outputs/ui" / run["audioFile"]
             if not audio.is_file():
                 raise FileNotFoundError(f"Generated WAV is missing: {audio}")
+            reference_path = resolve_path(run.get("referenceAudio", self.config["reference_audio"]))
+            if not reference_path.is_file():
+                raise FileNotFoundError(f"Reference WAV is missing: {reference_path}")
+            reference_key = str(reference_path.resolve())
+            if reference_key not in self.references:
+                self.references[reference_key] = embedding(self.encoder, reference_path)
             from jiwer import wer
 
             started = time.perf_counter()
@@ -60,7 +66,7 @@ class Evaluator:
                 status="ok",
                 asrText=asr_text,
                 wer=round(float(wer(normalized_input, normalized_asr)), 6),
-                speakerCosine=round(cosine(self.reference, embedding(self.encoder, audio)), 6),
+                speakerCosine=round(cosine(self.references[reference_key], embedding(self.encoder, audio)), 6),
                 evaluationSeconds=round(time.perf_counter() - started, 6),
             )
         except Exception as exc:

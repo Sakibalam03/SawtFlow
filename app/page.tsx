@@ -31,6 +31,7 @@ type Run = {
   fullClipLatencySeconds?: number;
   rtf?: number;
   peakVramMb?: number;
+  referenceAudio?: string;
   error?: string;
   evaluation?: Evaluation | null;
   ratings?: RatingSummary;
@@ -51,6 +52,11 @@ type Metrics = {
     meanSpeakerCosine: number | null;
   };
   history: Run[];
+};
+type VoiceProfile = {
+  id: string;
+  transcript: string;
+  audioUrl: string;
 };
 
 const profiles = {
@@ -178,7 +184,17 @@ export default function Home() {
     speakerJudgment: "unsure",
   });
   const [savingRating, setSavingRating] = useState(false);
+  const [recording, setRecording] = useState<Blob | null>(null);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [referenceTranscript, setReferenceTranscript] = useState("");
+  const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
+  const [voiceProfileStatus, setVoiceProfileStatus] = useState<
+    "idle" | "recording" | "saving" | "ready" | "error"
+  >("idle");
+  const [voiceProfileError, setVoiceProfileError] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const recordingChunks = useRef<Blob[]>([]);
 
   const refreshMetrics = useCallback(async (runId?: string | null) => {
     const response = await fetch(
@@ -190,12 +206,6 @@ export default function Home() {
 
   useEffect(() => {
     void refreshMetrics();
-    void fetch("/api/generate", { cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) throw new Error();
-        setWorkerStatus("ready");
-      })
-      .catch(() => setWorkerStatus("error"));
     void fetch("/api/evaluate", { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error();
@@ -203,6 +213,25 @@ export default function Home() {
       })
       .catch(() => setEvaluatorStatus("error"));
   }, [refreshMetrics]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setWorkerStatus("warming");
+    void fetch(
+      `/api/generate?language=${encodeURIComponent(language)}&model=${encodeURIComponent(modelId)}`,
+      { cache: "no-store" },
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error();
+        if (!cancelled) setWorkerStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setWorkerStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [language, modelId]);
 
   const generate = async () => {
     if (!text.trim() || status === "processing") return;
@@ -215,7 +244,7 @@ export default function Home() {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, category: profile, language, model: modelId }),
+        body: JSON.stringify({ text, category: profile, language, model: modelId, referenceId: voiceProfile?.id }),
       });
       const result = (await response.json()) as {
         runId?: string;
@@ -235,7 +264,7 @@ export default function Home() {
       } else if (result.modelId) {
         const generatedModel = pipelineFor(language).models[result.modelId];
         setGenerationNotice(
-          `Generated with ${generatedModel?.label ?? result.modelId}.`,
+          `Generated with ${generatedModel?.label ?? result.modelId} using the ${voiceProfile ? "custom recorded" : "project"} voice reference.`,
         );
       }
       setStatus("ready");
@@ -305,6 +334,80 @@ export default function Home() {
     } finally {
       setSavingRating(false);
     }
+  };
+
+  const startRecording = async () => {
+    setVoiceProfileError(null);
+    // Starting a new capture intentionally replaces the prior session choice.
+    // It cannot be used until the user saves this new recording and transcript.
+    setVoiceProfile(null);
+    setRecording(null);
+    setReferenceTranscript("");
+    if (recordingUrl) {
+      URL.revokeObjectURL(recordingUrl);
+      setRecordingUrl(null);
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      recordingChunks.current = [];
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size) recordingChunks.current.push(event.data);
+      };
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const nextRecording = new Blob(recordingChunks.current, {
+          type: mediaRecorder.mimeType || "audio/webm",
+        });
+        if (nextRecording.size) {
+          if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+          setRecording(nextRecording);
+          setRecordingUrl(URL.createObjectURL(nextRecording));
+          setVoiceProfileStatus("idle");
+        }
+      };
+      recorder.current = mediaRecorder;
+      mediaRecorder.start();
+      setVoiceProfileStatus("recording");
+    } catch {
+      setVoiceProfileStatus("error");
+      setVoiceProfileError("Microphone access was not available. Allow it in your browser and try again.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorder.current?.state === "recording") recorder.current.stop();
+  };
+
+  const saveVoiceProfile = async () => {
+    if (!recording || !referenceTranscript.trim()) return;
+    setVoiceProfileStatus("saving");
+    setVoiceProfileError(null);
+    try {
+      const form = new FormData();
+      form.append("audio", new File([recording], "voice-reference.webm", { type: recording.type || "audio/webm" }));
+      form.append("transcript", referenceTranscript.trim());
+      const response = await fetch("/api/voice-profile", { method: "POST", body: form });
+      const result = (await response.json()) as VoiceProfile & { error?: string };
+      if (!response.ok || !result.id || !result.audioUrl) throw new Error(result.error || "Could not save the voice profile.");
+      setVoiceProfile({ id: result.id, transcript: result.transcript, audioUrl: result.audioUrl });
+      setVoiceProfileStatus("ready");
+    } catch (saveError) {
+      setVoiceProfileStatus("error");
+      setVoiceProfileError(saveError instanceof Error ? saveError.message : "Could not save the voice profile.");
+    }
+  };
+
+  const useProjectReference = () => {
+    setVoiceProfile(null);
+    setRecording(null);
+    setReferenceTranscript("");
+    if (recordingUrl) {
+      URL.revokeObjectURL(recordingUrl);
+      setRecordingUrl(null);
+    }
+    setVoiceProfileStatus("idle");
+    setVoiceProfileError(null);
   };
 
   const active =
@@ -435,6 +538,14 @@ export default function Home() {
                 </select>
               </label>
             </div>
+            <div className={`reference-indicator ${voiceProfile ? "custom" : "project"}`}>
+              <Icon name={voiceProfile ? "check" : "mic"} size={14} />
+              <span>
+                {voiceProfile
+                  ? "Custom recorded voice active — applies to English, Hindi, and Arabic."
+                  : "Project reference.wav active — record a voice profile to replace it for this session."}
+              </span>
+            </div>
             <textarea
               value={text}
               onChange={(event) => {
@@ -452,13 +563,23 @@ export default function Home() {
               <button
                 className="generate"
                 onClick={generate}
-                disabled={!text.trim() || status === "processing"}
+                disabled={
+                  !text.trim() ||
+                  status === "processing" ||
+                  workerStatus !== "ready"
+                }
               >
                 {status === "processing" ? (
                   <>
                     <span className="spinner" /> Generating{" "}
                     {languageNames[language]} audio...
                   </>
+                ) : workerStatus === "warming" ? (
+                  <>
+                    <span className="spinner" /> Warming {selectedModel.label}...
+                  </>
+                ) : workerStatus === "error" ? (
+                  <>Voice model unavailable</>
                 ) : (
                   <>
                     <Icon name="spark" size={16} /> Generate audio
@@ -473,7 +594,7 @@ export default function Home() {
               </p>
             )}
           </section>
-          <section
+          {(status === "processing" || active) && <section
             className={`audio-card ${status === "processing" ? "is-processing" : ""} ${isPlaying ? "is-playing" : ""}`}
             aria-live="polite"
           >
@@ -518,10 +639,16 @@ export default function Home() {
                 <>
                   <p className="label">AUDIO PREVIEW</p>
                   <h2>
-                    Ready when you are
+                    {workerStatus === "warming"
+                      ? `Preparing ${selectedModel.label}`
+                      : workerStatus === "error"
+                        ? "Voice model needs attention"
+                        : "Ready when you are"}
                   </h2>
                   <span>
-                    {`Generate ${languageNames[language]} audio with ${selectedModel.label} to create a voice-cloned WAV.`}
+                    {workerStatus === "warming"
+                      ? "Generation will unlock as soon as the selected model is ready."
+                      : `Generate ${languageNames[language]} audio with ${selectedModel.label} to create a voice-cloned WAV.`}
                   </span>
                 </>
               )}
@@ -548,8 +675,74 @@ export default function Home() {
                 </button>
               </>
             )}
-          </section>
+          </section>}
         </div>
+
+        <aside className="reference-column">
+          <section className="voice-profile-panel">
+            <p className="label">
+              <Icon name="mic" size={14} /> VOICE PROFILE
+            </p>
+            <h2>Record a voice reference</h2>
+            <p>
+              Record 8–20 seconds in a quiet room, then enter the exact words
+              you said. This profile is used only for this browser session.
+            </p>
+            <button
+              className={`record-button ${voiceProfileStatus === "recording" ? "recording" : ""}`}
+              onClick={
+                voiceProfileStatus === "recording"
+                  ? stopRecording
+                  : () => void startRecording()
+              }
+              disabled={voiceProfileStatus === "saving"}
+            >
+              <Icon name={voiceProfileStatus === "recording" ? "stop" : "mic"} size={16} />
+              {voiceProfileStatus === "recording" ? "Stop recording" : "Record voice"}
+            </button>
+            {(recordingUrl || voiceProfile?.audioUrl) && (
+              <audio
+                className="voice-profile-audio"
+                controls
+                src={recordingUrl || voiceProfile?.audioUrl || undefined}
+              />
+            )}
+            <label className="voice-transcript">
+              Exact recorded transcript
+              <textarea
+                value={referenceTranscript}
+                onChange={(event) => setReferenceTranscript(event.target.value)}
+                maxLength={1000}
+                placeholder="Type exactly what you recorded…"
+              />
+            </label>
+            <button
+              className="secondary save-profile"
+              onClick={() => void saveVoiceProfile()}
+              disabled={
+                !recording ||
+                referenceTranscript.trim().length < 8 ||
+                voiceProfileStatus === "saving" ||
+                voiceProfileStatus === "recording"
+              }
+            >
+              {voiceProfileStatus === "saving" ? "Preparing WAV…" : "Use this voice"}
+            </button>
+            {voiceProfile ? (
+              <div className="active-profile">
+                <span><Icon name="check" size={13} /> Custom voice active</span>
+                <button onClick={useProjectReference}>Use project voice</button>
+              </div>
+            ) : (
+              <small className="profile-default">
+                {recording
+                  ? "New recording ready — enter its transcript, then click Use this voice."
+                  : "Project reference voice is active."}
+              </small>
+            )}
+            {voiceProfileError && <p className="error profile-error">{voiceProfileError}</p>}
+          </section>
+        </aside>
 
         <aside className="evidence-column">
           <section className="metrics-panel">
@@ -650,7 +843,7 @@ export default function Home() {
                   </p>
                   <h2>Quick reference check</h2>
                 </div>
-                <audio controls src="/api/reference" />
+                <audio controls src={voiceProfile?.audioUrl || "/api/reference"} />
               </div>
               <div className="compact-rating">
                 <input

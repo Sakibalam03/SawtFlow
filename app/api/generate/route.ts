@@ -9,6 +9,10 @@ import {
   type WorkerKind,
 } from "../../../lib/tts-pipelines";
 import { appendRun, root, uiOutput } from "../../../lib/ui-evidence";
+import {
+  readVoiceProfile,
+  type VoiceProfile,
+} from "../../../lib/voice-profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -213,6 +217,7 @@ async function generate(
   modelId: string,
   text: string,
   outputFile: string,
+  voiceProfile?: VoiceProfile,
 ) {
   const [, pipeline] = modelFor(language, modelId);
   const worker = workers[pipeline.worker];
@@ -222,7 +227,7 @@ async function generate(
   const result = await new Promise<Result>((resolve, reject) => {
     worker.pending.set(id, { resolve, reject });
     worker.child?.stdin.write(
-      `${JSON.stringify({ id, text, language, output: outputFile })}\n`,
+      `${JSON.stringify({ id, text, language, output: outputFile, reference: voiceProfile?.audioPath, referenceTranscript: voiceProfile?.transcript })}\n`,
     );
   });
   const startup = worker.firstRequest ? worker.metrics : undefined;
@@ -237,7 +242,14 @@ export async function GET(request: NextRequest) {
       : request.nextUrl.searchParams.get("language") === "hi"
         ? "hi"
         : "en";
-  const [modelId, pipeline] = modelFor(language);
+  const requestedModel = request.nextUrl.searchParams.get("model") || undefined;
+  const languagePipeline = pipelineFor(language);
+  if (requestedModel && !languagePipeline.models[requestedModel])
+    return NextResponse.json(
+      { error: "That model is not available for the selected language." },
+      { status: 400 },
+    );
+  const [modelId, pipeline] = modelFor(language, requestedModel);
   try {
     return NextResponse.json({
       status: "ready",
@@ -269,12 +281,15 @@ export async function POST(request: Request) {
     category?: unknown;
     language?: unknown;
     model?: unknown;
+    referenceId?: unknown;
   };
   const text = typeof body.text === "string" ? body.text.trim() : "";
   const language: Language =
     body.language === "ar" || body.language === "hi" ? body.language : "en";
   const requestedModel =
     typeof body.model === "string" ? body.model : undefined;
+  const referenceId =
+    typeof body.referenceId === "string" ? body.referenceId : undefined;
   const languagePipeline = pipelineFor(language);
   if (requestedModel && !languagePipeline.models[requestedModel])
     return NextResponse.json(
@@ -298,6 +313,17 @@ export async function POST(request: Request) {
     );
   mkdirSync(uiOutput, { recursive: true });
   let [modelId, pipeline] = modelFor(language, requestedModel);
+  let voiceProfile: VoiceProfile | undefined;
+  if (referenceId) {
+    try {
+      voiceProfile = readVoiceProfile(referenceId);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Voice profile was not found." },
+        { status: 400 },
+      );
+    }
+  }
   const runId = `ui-${language}-${Date.now()}`,
     filename = `${runId}.wav`,
     outputFile = path.join(uiOutput, filename);
@@ -306,13 +332,13 @@ export async function POST(request: Request) {
   try {
     let result: Awaited<ReturnType<typeof generate>>;
     try {
-      result = await generate(language, modelId, text, outputFile);
+      result = await generate(language, modelId, text, outputFile, voiceProfile);
     } catch (primaryError) {
       const fallback = !requestedModel && languagePipeline.fallback;
       if (!fallback) throw primaryError;
       [modelId, pipeline] = modelFor(language, fallback);
       fallbackUsed = true;
-      result = await generate(language, modelId, text, outputFile);
+      result = await generate(language, modelId, text, outputFile, voiceProfile);
     }
     if (!existsSync(outputFile))
       throw new Error("Voice worker completed without creating a WAV.");
@@ -334,7 +360,9 @@ export async function POST(request: Request) {
       peakVramMb: result.peakVramMb,
       ttfaMode: "not_measured_batch_api",
       startupSeconds: result.startup?.startupSeconds,
-      referenceAudio: "data/references/reference.wav",
+      referenceAudio: voiceProfile
+        ? path.relative(root, voiceProfile.audioPath).replaceAll("\\", "/")
+        : "data/references/reference.wav",
     });
     return NextResponse.json({
       runId,
@@ -358,7 +386,9 @@ export async function POST(request: Request) {
       status: "error",
       error: detail,
       ttfaMode: "not_measured_batch_api",
-      referenceAudio: "data/references/reference.wav",
+      referenceAudio: voiceProfile
+        ? path.relative(root, voiceProfile.audioPath).replaceAll("\\", "/")
+        : "data/references/reference.wav",
     });
     return NextResponse.json({ error: detail }, { status: 500 });
   } finally {

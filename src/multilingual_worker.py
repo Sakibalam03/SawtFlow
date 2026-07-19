@@ -38,6 +38,7 @@ def main() -> None:
         started = time.perf_counter()
         model.prepare_conditionals(str(reference), exaggeration=0.5)
         cuda_synchronize(device)
+        conditioned_reference = str(reference.resolve())
         emit({"kind": "ready", "loadSeconds": load_seconds, "conditioningSeconds": time.perf_counter() - started})
     except Exception:
         emit({"kind": "startup_error", "error": traceback.format_exc(limit=3)})
@@ -51,11 +52,17 @@ def main() -> None:
                 break
             request_id, text, language = request["id"], str(request["text"]).strip(), str(request["language"])
             output = Path(request["output"])
+            requested_reference = Path(request.get("reference", reference)).resolve()
+            if not requested_reference.is_file():
+                raise FileNotFoundError("Selected voice reference WAV is missing.")
             if language not in {"ar", "hi"}:
                 raise ValueError("Multilingual worker supports Arabic and Hindi only.")
             if not text or len(text) > 1000:
                 raise ValueError("Text must contain 1 to 1,000 characters.")
             reset_peak_memory(device); cuda_synchronize(device); started = time.perf_counter()
+            if str(requested_reference) != conditioned_reference:
+                model.prepare_conditionals(str(requested_reference), exaggeration=0.5)
+                conditioned_reference = str(requested_reference)
             # A zero CFG weight avoids carrying the English reference accent into
             # the target language while retaining the speaker conditioning.
             waveform = model.generate(text, language_id=language, cfg_weight=0.0)

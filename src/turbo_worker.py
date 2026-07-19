@@ -35,6 +35,7 @@ def main() -> None:
         model.prepare_conditionals(str(reference), exaggeration=0.0, norm_loudness=True)
         cuda_synchronize(device)
         conditioning_seconds = time.perf_counter() - conditioning_start
+        conditioned_reference = str(reference.resolve())
         emit({"kind": "ready", "loadSeconds": load_seconds, "conditioningSeconds": conditioning_seconds})
     except Exception:
         emit({"kind": "startup_error", "error": traceback.format_exc(limit=3)})
@@ -49,6 +50,9 @@ def main() -> None:
             request_id = request["id"]
             text = str(request["text"]).strip()
             output = Path(request["output"])
+            requested_reference = Path(request.get("reference", reference)).resolve()
+            if not requested_reference.is_file():
+                raise FileNotFoundError("Selected voice reference WAV is missing.")
             if not text:
                 raise ValueError("Text must not be empty.")
             if len(text) > 1000:
@@ -57,6 +61,9 @@ def main() -> None:
             reset_peak_memory(device)
             cuda_synchronize(device)
             generation_start = time.perf_counter()
+            if str(requested_reference) != conditioned_reference:
+                model.prepare_conditionals(str(requested_reference), exaggeration=0.0, norm_loudness=True)
+                conditioned_reference = str(requested_reference)
             waveform = model.generate(text)
             cuda_synchronize(device)
             generation_seconds = time.perf_counter() - generation_start
