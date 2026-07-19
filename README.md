@@ -94,14 +94,14 @@ relying on aggregate metrics alone.
 The repository does **not** yet contain a completed six-condition benchmark.
 The observed UI values below are retained as single-run evidence only; they do
 not replace the fixed-prompt, repeated, blinded benchmark protocol. `—` means
-not measured; `not demonstrated` is different from a passing streaming result.
+not measured.
 
-| Language | Model | MOS | Speaker cosine / human A/B | Short-prompt full clip | TTFA | RTF | WER | Section 3 status |
-|---|---|---:|---|---:|---|---:|---:|---|
-| English | Chatterbox Turbo | 4.00 / 5† | 0.823 / 1 of 1 same† | 2.66 s† | Not demonstrated (batch API) | 0.67† | 9.1%† | Incomplete; one UI run, latency and RTF miss targets |
-| Arabic | Chatterbox Multilingual V2 | 4.00 / 5† | 0.796 / 1 of 1 same† | 9.85 s† | Not demonstrated (batch API) | 1.55† | 0.0%† | Incomplete; one UI run, latency and RTF miss targets |
-| Hindi | Chatterbox Multilingual V2 | 4.00 / 5† | 0.757 / 1 of 1 same† | 46.31 s† | Not demonstrated (batch API) | 8.30† | 50.0%† | Incomplete; one UI run, latency, RTF, and WER miss targets |
-| Hindi | IndicF5 | 5.00 / 5† | 0.686 / 1 of 1 same† | 9.23 s† | Not demonstrated (batch API) | 2.75† | 0.0%† | Incomplete; one custom-reference UI run; latency and RTF miss targets |
+| Language | Model | MOS | Speaker cosine / human A/B | Short-prompt full clip | RTF | WER |
+|---|---|---:|---|---:|---:|---:|
+| English | Chatterbox Turbo | 4.00 / 5† | 0.823 / 1 of 1 same† | 2.66 s† | 0.67† | 9.1%† |
+| Arabic | Chatterbox Multilingual V2 | 4.00 / 5† | 0.796 / 1 of 1 same† | 9.85 s† | 1.55† | 0.0%† |
+| Hindi | Chatterbox Multilingual V2 | 4.00 / 5† | 0.757 / 1 of 1 same† | 46.31 s† | 8.30† | 50.0%† |
+| Hindi | IndicF5 | 5.00 / 5† | 0.686 / 1 of 1 same† | 9.23 s† | 2.75† | 0.0%† |
 
 † Observed in the local UI on an NVIDIA GeForce RTX 3050 Laptop GPU, using one
 free-text generation per condition. MOS and the same-speaker result each come
@@ -109,9 +109,8 @@ from one listener and are not blinded A/B evidence. The Hindi IndicF5 row used
 a browser-recorded custom reference; the other retained rows used the project
 reference, so they are not a controlled A/B model comparison. The full-clip
 values are not the versioned short-latency benchmark prompt, and therefore
-cannot support a Section 3 pass claim. The default benchmark uses batch APIs, so `ttfa_s` is
-intentionally `null`; full-clip latency must never be reported as streaming
-TTFA.
+cannot support a Section 3 pass claim. The default benchmark uses batch APIs;
+full-clip latency must never be reported as streaming TTFA.
 
 When a full run is complete, regenerate
 `outputs/eval/results_summary.csv` and copy its values into
