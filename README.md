@@ -47,19 +47,22 @@ Chatterbox Multilingual V2 for Arabic. Hindi automatically falls back to
 Chatterbox Multilingual V2 when IndicF5 cannot start. The language-to-model
 mapping, default, and fallback are centralized in
 `configs/tts-pipelines.json`, so a model can be changed without altering the
-route or UI code.
+route or UI code. The UI can also create a per-session browser voice profile:
+its recorded WAV and exact transcript condition all three UI pipelines without
+replacing the checked-in project reference.
 
 ### Repository map
 
 | Path | Purpose |
 |---|---|
 | `configs/benchmark.yaml` | Seed, device, reference, prompt-run counts, model set, and evaluator configuration. |
+| `configs/tts-pipelines.json` | UI language-to-model, worker, Conda environment, default, and fallback mapping. |
 | `envs/` | Isolated Conda environments so model dependencies do not conflict. |
 | `src/run_*.py` | Model-specific generation wrappers sharing the same timing and artifact logic. |
 | `src/evaluate.py` | Forced-language Faster-Whisper WER and ECAPA speaker-cosine evaluation. |
 | `src/make_listening_sheet.py` | Blinded absolute and paired A/B listening sheets. |
 | `src/aggregate_results.py` | Per-language/per-model summary and target flags. |
-| `outputs/` | Generated WAVs, JSONL run records, evaluation CSVs, and local UI evidence. |
+| `outputs/` | Generated WAVs, JSONL run records, evaluation CSVs, local UI evidence, and browser-recorded voice profiles. |
 | `evidence/` | Host and package snapshots captured for an actual benchmark run. |
 | `report/REPORT_TEMPLATE.md` | Final submission-report template. |
 
@@ -96,16 +99,17 @@ not measured; `not demonstrated` is different from a passing streaming result.
 | Language | Model | MOS | Speaker cosine / human A/B | Short-prompt full clip | TTFA | RTF | WER | Section 3 status |
 |---|---|---:|---|---:|---|---:|---:|---|
 | English | Chatterbox Turbo | 4.00 / 5† | 0.823 / 1 of 1 same† | 2.66 s† | Not demonstrated (batch API) | 0.67† | 9.1%† | Incomplete; one UI run, latency and RTF miss targets |
-| English | Chatterbox Multilingual V2 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
 | Arabic | Chatterbox Multilingual V2 | 4.00 / 5† | 0.796 / 1 of 1 same† | 9.85 s† | Not demonstrated (batch API) | 1.55† | 0.0%† | Incomplete; one UI run, latency and RTF miss targets |
 | Hindi | Chatterbox Multilingual V2 | 4.00 / 5† | 0.757 / 1 of 1 same† | 46.31 s† | Not demonstrated (batch API) | 8.30† | 50.0%† | Incomplete; one UI run, latency, RTF, and WER miss targets |
-| Hindi | IndicF5 | — | — | — | Not demonstrated (batch API) | — | — | Not run/evaluated |
+| Hindi | IndicF5 | 5.00 / 5† | 0.686 / 1 of 1 same† | 9.23 s† | Not demonstrated (batch API) | 2.75† | 0.0%† | Incomplete; one custom-reference UI run; latency and RTF miss targets |
 
 † Observed in the local UI on an NVIDIA GeForce RTX 3050 Laptop GPU, using one
 free-text generation per condition. MOS and the same-speaker result each come
-from one listener and are not blinded A/B evidence. The full-clip values are
-not the versioned short-latency benchmark prompt, and therefore cannot support
-a Section 3 pass claim. The default benchmark uses batch APIs, so `ttfa_s` is
+from one listener and are not blinded A/B evidence. The Hindi IndicF5 row used
+a browser-recorded custom reference; the other retained rows used the project
+reference, so they are not a controlled A/B model comparison. The full-clip
+values are not the versioned short-latency benchmark prompt, and therefore
+cannot support a Section 3 pass claim. The default benchmark uses batch APIs, so `ttfa_s` is
 intentionally `null`; full-clip latency must never be reported as streaming
 TTFA.
 
@@ -159,7 +163,10 @@ conda env create --file envs/eval.yml --force
 The environments are named `infinia-chatterbox`, `infinia-xtts`,
 `infinia-indicf5`, and `infinia-eval`. Chatterbox explicitly pins
 `torch==2.6.0+cu126` and `torchaudio==2.6.0+cu126`; use the package declarations
-in `envs/` as the reproducibility source of truth.
+in `envs/` as the reproducibility source of truth. IndicF5 uses the matching
+CUDA 12.6 Torch/TorchAudio builds, `numpy==1.26.4`, and
+`transformers==4.49.0`; its upstream model code is not compatible with
+Transformers 5.x.
 
 If a model download requires a token, copy `.env.example` to `.env` for the UI
 and export it before CLI use:
@@ -195,6 +202,12 @@ The checkout includes a reference asset for the project smoke test, but the
 consent/source record still contains fields to verify or complete. Do not treat
 that asset as permission to reuse a real person’s voice beyond its documented
 scope.
+
+The local UI Voice Profile is separate from this formal benchmark reference.
+It stores a browser-recorded WAV and transcript locally for interactive use;
+it does not alter `configs/benchmark.yaml`, the CLI reference, or formal
+benchmark evidence. Obtain the same permission and transcript accuracy for
+each profile before using it.
 
 ### 3. Configure an isolated evidence directory
 
@@ -372,12 +385,31 @@ Hugging Face model: accept its repository terms and place an authorized
 `HF_TOKEN` in `.env` before starting Next.js. Without it, Hindi remains
 available through the automatic Multilingual V2 fallback.
 
+The Voice Profile card records through the browser microphone. Record a clean
+8â€“20 second sample, enter the **exact** spoken transcript, and choose **Use
+this voice**. The server converts the recording to mono 24 kHz PCM WAV with
+FFmpeg; ensure `ffmpeg` is on PATH or set `INFINIA_FFMPEG_EXE` to its
+executable. The active profile is shown in both the Voice Profile and
+Generation cards. It conditions English, Hindi, and Arabic UI requests, and
+the per-clip speaker-cosine evaluator uses that same profile as its reference.
+Choosing **Use project voice** restores `data/references/reference.wav` for
+the session.
+
+Only one voice-model worker is intentionally kept on the GPU. Switching
+language or model closes the inactive worker before warming the selected one,
+which avoids GPU memory exhaustion on the supported laptop hardware. A switch
+between Arabic and the Hindi Multilingual V2 fallback reuses the same worker;
+the UI may still briefly show a readiness check.
+
 The UI writes to `outputs/ui/`. A new dev/server session clears its three JSONL
 evidence logs (`runs.jsonl`, `evaluations.jsonl`, and `ratings.jsonl`) to begin
-a comparable session, although older WAVs remain. Export anything you need
-before restarting it. UI telemetry uses a batch API and therefore also has no
-TTFA measurement; do not merge it into the formal CLI results without a
-documented protocol.
+a comparable session, although older generated WAVs and `references/` voice
+profiles remain local. The active profile selection is browser-session state;
+record again after a refresh if you need to reactivate a profile. Each run
+records its actual `referenceAudio` path in `outputs/ui/runs.jsonl`. Export
+anything you need before restarting it. UI telemetry uses a batch API and
+therefore also has no TTFA measurement; do not merge it into the formal CLI
+results without a documented protocol.
 
 ## Artifacts and sample output
 
@@ -400,6 +432,22 @@ Each JSONL row is self-describing: it has a unique `run_id`, model, language,
 prompt ID/category/text, repetition/warm-up state, timings, audio location,
 status, and any exception text. Keep the JSONL, WAVs, host snapshot, package
 snapshot, configuration, and completed rating sheets together for audit.
+
+The interactive UI uses a separate local layout:
+
+```text
+outputs/ui/
+├── runs.jsonl                 # UI generation telemetry, including referenceAudio
+├── evaluations.jsonl          # per-clip WER and speaker cosine
+├── ratings.jsonl              # lightweight UI listener entries
+├── ui-<language>-<time>.wav   # generated clips
+└── references/
+    ├── <profile-id>.wav       # browser-recorded profile converted to 24 kHz WAV
+    └── <profile-id>.json      # exact transcript and local metadata
+```
+
+These UI files are local demonstration evidence, not an automatically blinded
+or repeatable formal benchmark run.
 
 ### Retained smoke-run examples
 
